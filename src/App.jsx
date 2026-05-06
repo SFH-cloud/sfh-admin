@@ -1185,18 +1185,18 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
 
           {/* Actions */}
           {(()=>{
-            // "Approve" available when:
-            // 1. Task is done (no inspection needed), OR
-            // 2. All checklist items inspected and none have issues
-            const allOk = total===0 || (Object.keys(inspState).length===total && !hasIssues);
-            const canApprove = task.approvedAt==null && (task.status==="done" || allOk);
             const isApproved = !!task.approvedAt;
             return(
               <div style={{display:"flex",gap:8,flexDirection:"column"}}>
-                {/* Approve button */}
-                {!isApproved?(
+                {/* Approve button — available for any done task not yet approved */}
+                {isApproved?(
+                  <div style={{background:"#22c55e18",border:"1px solid #22c55e44",borderRadius:10,padding:"11px",textAlign:"center"}}>
+                    <div style={{fontSize:13,color:"#22c55e",fontWeight:800}}>✅ Approved</div>
+                    <div style={{fontSize:10,color:"#22c55e88",marginTop:2}}>{new Date(task.approvedAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                ):(
                   <button
-                    onClick={()=>{
+                    onClick={async()=>{
                       const approved={
                         ...task,
                         status:"done",
@@ -1204,18 +1204,12 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                         approvedBy:allUsers.find(x=>x.id===task.assigneeId)?.name||"Management",
                         updatedAt:new Date().toISOString(),
                       };
-                      onUpdate(approved);
+                      await onUpdate(approved);
                       onClose();
                     }}
-                    disabled={!canApprove}
-                    style={{width:"100%",padding:"13px",background:canApprove?"#22c55e":"#1e1e38",border:`1px solid ${canApprove?"#22c55e":"#252540"}`,borderRadius:10,color:canApprove?"#000":"#333",fontWeight:800,fontSize:13,cursor:canApprove?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                    ✅ {task.status!=="done" && !allOk ? "Mark all items OK first" : "Approve Task"}
+                    style={{width:"100%",padding:"13px",background:"#22c55e",border:"1px solid #22c55e",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                    ✅ Approve Task
                   </button>
-                ):(
-                  <div style={{background:"#22c55e18",border:"1px solid #22c55e44",borderRadius:10,padding:"11px",textAlign:"center"}}>
-                    <div style={{fontSize:13,color:"#22c55e",fontWeight:800}}>✅ Approved</div>
-                    <div style={{fontSize:10,color:"#22c55e88",marginTop:2}}>{new Date(task.approvedAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
-                  </div>
                 )}
                 {!canApprove&&!isApproved&&task.status!=="done"&&(
                   <div style={{fontSize:10,color:"#555",textAlign:"center"}}>Mark all checklist items as OK to approve</div>
