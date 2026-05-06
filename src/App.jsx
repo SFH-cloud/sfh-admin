@@ -1483,10 +1483,25 @@ function LiveLocations({liveLocations,allUsers}){
               <div key={loc} style={{background:"#111128",border:"1px solid #22c55e22",borderRadius:14,padding:"14px 16px"}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#22c55e",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span>📡</span>{loc}</div>
                 {staff.map(s=>{const color=RC[s.role]||"#666";return(
-                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 10px",background:"#0a0a1a",borderRadius:10}}>
-                    <Av name={s.name} size={30} color={color}/>
-                    <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{s.name}</div><div style={{fontSize:10,color:"#555"}}>since {s.time}</div></div>
-                    <Badge label={s.role} color={color} sm/>
+                  <div key={s.id} style={{background:"#0a0a1a",borderRadius:10,marginBottom:8,overflow:"hidden"}}>
+                    {/* Location photo if available */}
+                    {s.photo&&(
+                      <div style={{position:"relative"}}>
+                        <img src={s.photo} alt="location" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/>
+                        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,#000000cc)",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                          <div style={{fontSize:11,color:"#fff",fontWeight:700}}>{s.name}</div>
+                          <div style={{fontSize:9,color:"#aaa"}}>since {s.time}</div>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px"}}>
+                      <Av name={s.name} size={30} color={color}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{s.name}</div>
+                        <div style={{fontSize:10,color:"#555"}}>{s.taskTitle||""}{s.taskTitle?" · ":""} since {s.time}</div>
+                      </div>
+                      <Badge label={s.role} color={color} sm/>
+                    </div>
                   </div>
                 );})}
               </div>
