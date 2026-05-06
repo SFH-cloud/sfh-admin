@@ -1116,15 +1116,46 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
           )}
 
           {/* Actions */}
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>{onUpdate({...task,status:"done",updatedAt:new Date().toISOString()});onClose();}} disabled={task.status==="done"}
-              style={{flex:2,padding:"11px",background:task.status==="done"?"#1e1e38":"#22c55e22",border:`1px solid ${task.status==="done"?"#252540":"#22c55e55"}`,borderRadius:10,color:task.status==="done"?"#333":"#22c55e",fontWeight:700,fontSize:12,cursor:task.status==="done"?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif"}}>
-              {task.status==="done"?"✓ Completed":"Mark as Done"}
-            </button>
-            <button onClick={()=>onDelete(task.id)} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #ef444433",borderRadius:10,color:"#ef4444",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
-              Delete
-            </button>
-          </div>
+          {(()=>{
+            // "Approve" available when: task done OR all checklist items inspected OK
+            const allOk = total>0 && Object.keys(inspState).length===total && !hasIssues;
+            const canApprove = (task.status==="done"||allOk) && task.approvedAt==null;
+            const isApproved = !!task.approvedAt;
+            return(
+              <div style={{display:"flex",gap:8,flexDirection:"column"}}>
+                {/* Approve button */}
+                {!isApproved?(
+                  <button
+                    onClick={()=>{
+                      const approved={
+                        ...task,
+                        status:"done",
+                        approvedAt:new Date().toISOString(),
+                        approvedBy:allUsers.find(x=>x.id===task.assigneeId)?.name||"Management",
+                        updatedAt:new Date().toISOString(),
+                      };
+                      onUpdate(approved);
+                      onClose();
+                    }}
+                    disabled={!canApprove}
+                    style={{width:"100%",padding:"13px",background:canApprove?"#22c55e":"#1e1e38",border:`1px solid ${canApprove?"#22c55e":"#252540"}`,borderRadius:10,color:canApprove?"#000":"#333",fontWeight:800,fontSize:13,cursor:canApprove?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                    ✅ {canApprove?"Approve Task":"Inspect all items first"}
+                  </button>
+                ):(
+                  <div style={{background:"#22c55e18",border:"1px solid #22c55e44",borderRadius:10,padding:"11px",textAlign:"center"}}>
+                    <div style={{fontSize:13,color:"#22c55e",fontWeight:800}}>✅ Approved</div>
+                    <div style={{fontSize:10,color:"#22c55e88",marginTop:2}}>{new Date(task.approvedAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                )}
+                {!canApprove&&!isApproved&&task.status!=="done"&&(
+                  <div style={{fontSize:10,color:"#555",textAlign:"center"}}>Mark all checklist items as OK to approve</div>
+                )}
+                <button onClick={()=>onDelete(task.id)} style={{width:"100%",padding:"9px",background:"transparent",border:"1px solid #ef444433",borderRadius:10,color:"#ef4444",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  Delete Task
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </>
@@ -1246,7 +1277,8 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
                               <div>
                                 <div style={{color:"#fff",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
                                   {typeEm[t.type]||"📋"} {t.roundId&&t.location?t.location:t.title}
-                                  {(t.inspectionNote||t.inspectionHistory?.length>0)&&<span style={{background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>⚠️ return</span>}
+                                  {t.approvedAt&&<span style={{background:"#22c55e",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>✅ approved</span>}
+                                  {!t.approvedAt&&(t.inspectionNote||t.inspectionHistory?.length>0)&&<span style={{background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>⚠️ return</span>}
                                 </div>
                                 {t.roundId&&<div style={{fontSize:9,color:"#a78bfa",marginTop:1}}>🔄 Round · Area {t.roundArea}/{t.roundTotal}</div>}
                                 {prog!==null&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
@@ -1747,13 +1779,58 @@ export default function AdminPanel(){
 
   useEffect(()=>{
     (async()=>{
-      // Always require PIN login — never auto-restore admin session
-      // (prevents bypassing login screen on page load)
       await stor.del(SK.adminSess);
       await loadAll();
       setLoading(false);
     })();
     const iv=setInterval(loadAll,10000);
+    return()=>clearInterval(iv);
+  },[loadAll]);
+
+  // ── END OF SHIFT ARCHIVE — runs at 7:00am ─────────────────────────────────
+  // Moves all completed/approved tasks to inspections with date = previous day
+  useEffect(()=>{
+    const checkEndOfShift=()=>{
+      const now=new Date();
+      if(now.getHours()===7&&now.getMinutes()===0){
+        const lastRun=localStorage.getItem("sh5_eod_run");
+        const today=now.toISOString().slice(0,10);
+        if(lastRun===today)return; // already ran today
+        localStorage.setItem("sh5_eod_run",today);
+        archiveEndOfShift();
+      }
+    };
+    const archiveEndOfShift=async()=>{
+      const prevDay=new Date(Date.now()-86400000).toISOString().slice(0,10); // yesterday
+      const tk=await stor.get(SK.tasks);
+      if(!tk)return;
+      const doneTasks=tk.filter(t=>t.status==="done"||t.approvedAt);
+      if(!doneTasks.length)return;
+      // Create inspection records for each done task
+      const ins=await stor.get(SK.inspections)||[];
+      const newInspections=doneTasks.map(t=>({
+        id:uid(),
+        location:t.location||"General",
+        inspector:"management",
+        date:prevDay, // previous evening
+        score:t.approvedAt?100:80,
+        areas:[{area:"Task Completion",rating:t.approvedAt?5:4,notes:t.title}],
+        taskRef:t.id,
+        taskTitle:t.title,
+        approvedAt:t.approvedAt||null,
+        shiftDate:prevDay,
+        archivedAt:new Date().toISOString(),
+      }));
+      await stor.set(SK.inspections,[...ins,...newInspections]);
+      // Remove archived tasks from active list
+      const remaining=tk.filter(t=>t.status!=="done"&&!t.approvedAt);
+      await stor.set(SK.tasks,remaining);
+      setTasks(remaining);
+      await loadAll();
+    };
+    // Check every minute
+    const iv=setInterval(checkEndOfShift,60000);
+    checkEndOfShift(); // also check on load
     return()=>clearInterval(iv);
   },[loadAll]);
 
@@ -1824,6 +1901,26 @@ export default function AdminPanel(){
           </div>
           <div style={{fontSize:9,color:"#333",marginBottom:6}}>Last: {lastSync||"—"}</div>
           <button onClick={loadAll} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>↻ Refresh</button>
+          <button onClick={async()=>{
+            if(!confirm("Archive all completed tasks to Inspections? This will use yesterday's date as the shift date."))return;
+            const prevDay=new Date(Date.now()-86400000).toISOString().slice(0,10);
+            const doneTasks=tasks.filter(t=>t.status==="done"||t.approvedAt);
+            if(!doneTasks.length){alert("No completed tasks to archive.");return;}
+            const ins=await stor.get(SK.inspections)||[];
+            const newInspections=doneTasks.map(t=>({
+              id:uid(),location:t.location||"General",inspector:"management",
+              date:prevDay,score:t.approvedAt?100:80,
+              areas:[{area:"Task Completion",rating:t.approvedAt?5:4,notes:t.title}],
+              taskRef:t.id,taskTitle:t.title,approvedAt:t.approvedAt||null,
+              shiftDate:prevDay,archivedAt:new Date().toISOString(),
+            }));
+            await stor.set(SK.inspections,[...ins,...newInspections]);
+            const remaining=tasks.filter(t=>t.status!=="done"&&!t.approvedAt);
+            await stor.set(SK.tasks,remaining);
+            setTasks(remaining);
+            await loadAll();
+            alert(`Archived ${doneTasks.length} tasks to Inspections (shift date: ${prevDay})`);
+          }} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>📦 Archive End of Shift</button>
           <button onClick={handleLogout} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #ef444433",borderRadius:8,color:"#ef4444",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Sign Out</button>
         </div>
       </div>
