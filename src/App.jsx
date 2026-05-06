@@ -657,6 +657,15 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
         html+='<div class="task-row"><span class="'+cls+'">'+sym+'</span><span style="flex:1;margin-left:10px">'+(t.title||"")+'</span>';
         if(u)html+='<span class="staff-tag">'+u.name.split(" ")[0]+'</span>';
         html+='</div>';
+        // Task evidence photos
+        const evPhotos=(t.photos||[]).filter(p=>p.type!=="start"&&p.dataUrl);
+        if(includePhotos&&evPhotos.length>0){
+          html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 6px 26px">';
+          evPhotos.slice(0,4).forEach(ph=>{
+            html+='<img src="'+ph.dataUrl+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #e8d99a;" alt="evidence"/>';
+          });
+          html+='</div>';
+        }
       });
       if(includePhotos&&locCheckouts.length>0){
         html+='<div style="margin-top:12px"><div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Checkout Photos</div>';
@@ -1484,23 +1493,33 @@ function LiveLocations({liveLocations,allUsers}){
                 <div style={{fontSize:13,fontWeight:700,color:"#22c55e",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span>📡</span>{loc}</div>
                 {staff.map(s=>{const color=RC[s.role]||"#666";return(
                   <div key={s.id} style={{background:"#0a0a1a",borderRadius:10,marginBottom:8,overflow:"hidden"}}>
-                    {/* Location photo if available */}
-                    {s.photo&&(
+                    {/* Photo with name overlay */}
+                    {s.photo?(
                       <div style={{position:"relative"}}>
-                        <img src={s.photo} alt="location" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/>
-                        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,#000000cc)",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                          <div style={{fontSize:11,color:"#fff",fontWeight:700}}>{s.name}</div>
-                          <div style={{fontSize:9,color:"#aaa"}}>since {s.time}</div>
+                        <img src={s.photo} alt="location" style={{width:"100%",height:140,objectFit:"cover",display:"block"}}/>
+                        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,#000000dd)",padding:"10px 12px"}}>
+                          <div style={{fontSize:13,color:"#fff",fontWeight:800}}>{s.name}</div>
+                          <div style={{fontSize:10,color:"#aaa",marginTop:1}}>{s.taskTitle||""}{s.taskTitle?" · ":""}since {s.time}</div>
+                        </div>
+                        {/* Role badge top-right */}
+                        <div style={{position:"absolute",top:8,right:8}}>
+                          <Badge label={s.role} color={color} sm/>
                         </div>
                       </div>
-                    )}
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px"}}>
-                      <Av name={s.name} size={30} color={color}/>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{s.name}</div>
-                        <div style={{fontSize:10,color:"#555"}}>{s.taskTitle||""}{s.taskTitle?" · ":""} since {s.time}</div>
+                    ):(
+                      /* No photo — show name prominently */
+                      <div style={{padding:"12px",background:`${color}12`,borderBottom:`1px solid ${color}22`,display:"flex",alignItems:"center",gap:10}}>
+                        <Av name={s.name} size={36} color={color}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,fontWeight:800,color:"#fff"}}>{s.name}</div>
+                          <div style={{fontSize:10,color:color,marginTop:1}}>{s.taskTitle||"Working"}</div>
+                        </div>
+                        <Badge label={s.role} color={color} sm/>
                       </div>
-                      <Badge label={s.role} color={color} sm/>
+                    )}
+                    <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px"}}>
+                      <div style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",flexShrink:0}}/>
+                      <div style={{fontSize:10,color:"#555"}}>Active since {s.time}</div>
                     </div>
                   </div>
                 );})}
@@ -1561,11 +1580,40 @@ function RepairsPanel({repairs,allUsers,onUpdate}){
   );
 }
 
-function OrdersPanel({orders,allUsers,onUpdate}){
+function OrdersPanel({orders,allUsers,onUpdate,customProducts=[],onAddProduct}){
   const getUser=id=>allUsers.find(u=>u.id===id);
+  const [showAdd,setShowAdd]=useState(false);
+  const [newProd,setNewProd]=useState({name:"",icon:"🧴"});
+  const ICONS=["🫧","🧼","🪣","🚽","🗑️","🧤","🌀","🧹","🧽","🪥","🧴","🧻","📦","🪑","🧺"];
   return(
     <div>
-      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Supply Orders ({orders.length})</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Supply Orders ({orders.length})</div>
+        <button onClick={()=>setShowAdd(true)} style={{padding:"9px 16px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:10,color:"#d4a843",fontWeight:700,cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>+ Add Product to List</button>
+      </div>
+      {showAdd&&(
+        <div style={{background:"#111128",border:"1px solid #d4a84333",borderRadius:14,padding:"18px",marginBottom:20}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#d4a843",marginBottom:12}}>New Supply Product</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,marginBottom:12}}>
+            <input style={I} value={newProd.name} onChange={e=>setNewProd(p=>({...p,name:e.target.value}))} placeholder="Product name e.g. Sponges"/>
+            <select style={{...I,width:80}} value={newProd.icon} onChange={e=>setNewProd(p=>({...p,icon:e.target.value}))}>
+              {ICONS.map(ic=><option key={ic} value={ic}>{ic}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:"9px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
+            <button onClick={()=>{if(!newProd.name.trim())return;onAddProduct({...newProd,id:"cp_"+Date.now()});setNewProd({name:"",icon:"🧴"});setShowAdd(false);}} style={{flex:2,padding:"9px",background:"#d4a843",border:"none",borderRadius:8,color:"#000",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Add Product</button>
+          </div>
+        </div>
+      )}
+      {customProducts.length>0&&(
+        <div style={{marginBottom:16,padding:"12px 16px",background:"#111128",border:"1px solid #1e1e38",borderRadius:12}}>
+          <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Custom Products (available in mobile app)</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {customProducts.map(p=><span key={p.id} style={{fontSize:12,background:"#d4a84322",color:"#d4a843",border:"1px solid #d4a84333",borderRadius:8,padding:"3px 10px"}}>{p.icon} {p.name}</span>)}
+          </div>
+        </div>
+      )}
       {orders.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}>No orders yet</div>
       :[...orders].sort((a,b)=>b.date>a.date?1:-1).map(o=>{
         const u=getUser(o.requestedBy),sc=o.status==="pending"?"#f97316":"#22c55e";
@@ -1766,14 +1814,15 @@ export default function AdminPanel(){
   const [lastSync,setLastSync]           = useState(null);
   const [pins,setPins]                   = useState({}); // overridden PINs
   const [rounds,setRounds]               = useState(DEFAULT_ROUNDS);
+  const [customProducts,setCustomProducts] = useState([]);
 
   const allUsers=[...BASE_USERS,...extraProfiles];
 
   const loadAll=useCallback(async()=>{
-    const [tk,r,o,ins,ep,co,pns,rnd]=await Promise.all([
+    const [tk,r,o,ins,ep,co,pns,rnd,cp]=await Promise.all([
       stor.get(SK.tasks),stor.get(SK.repairs),stor.get(SK.orders),
       stor.get(SK.inspections),stor.get(SK.profiles),stor.get(SK.checkouts),
-      stor.get(SK.pins),stor.get(SK.rounds),
+      stor.get(SK.pins),stor.get(SK.rounds),stor.get("sh5_custom_products"),
     ]);
     if(tk!==null)setTasks(tk);
     if(r!==null)setRepairs(r);
@@ -1783,6 +1832,7 @@ export default function AdminPanel(){
     if(co!==null)setCheckouts(co);
     if(pns!==null)setPins(pns);
     if(rnd!==null)setRounds(rnd);
+    if(cp!==null)setCustomProducts(cp);
     const locData={};
     await Promise.all([...BASE_USERS,...(ep||[])].map(async u=>{
       const d=await stor.get(SK.locPrefix+u.id);
@@ -1946,7 +1996,7 @@ export default function AdminPanel(){
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
         {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x))}/>}
-        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))}/>}
+        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
       </div>
