@@ -186,22 +186,24 @@ const SK = {
 // ─── Push notification helper ────────────────────────────────────────────────
 const EDGE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co/functions/v1/push-notify";
 
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZmhiY2N5ZGFsdGVicG5mcXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MzAyOTIsImV4cCI6MjA5MzUwNjI5Mn0.uY4dwnTFqs1F43SMc9JChEta5PfQu4202LZ5owQ6Prc';
+
 const sendPush = async (userIds, notification) => {
   try {
     const subs = (await Promise.all(
       userIds.map(id => stor.get('sh5_push_' + id))
     )).filter(Boolean);
-    if (!subs.length) { console.log('No push subscriptions for', userIds); return; }
+    if (!subs.length) { console.log('No push subs for', userIds); return; }
     const res = await fetch(EDGE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-push-token': 'sfh-push-2026',
+        'Authorization': `Bearer ${SUPABASE_ANON}`,
       },
       body: JSON.stringify({ subscriptions: subs, notification }),
     });
-    const data = await res.json();
-    console.log('Push result:', data);
+    const data = await res.json().catch(()=>({raw:res.status}));
+    console.log('Push result:', JSON.stringify(data));
   } catch(e) { console.log('Push failed:', e); }
 };
 
