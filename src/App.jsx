@@ -1046,9 +1046,10 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                     <span style={{fontSize:10,color:"#555"}}>{h.date}</span>
                   </div>
                   <div style={{fontSize:12,color:"#ccc",whiteSpace:"pre-wrap",lineHeight:1.5}}>{h.note}</div>
-                  {task.status==="done"&&i===task.inspectionHistory.length-1&&(
-                    <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,background:"#22c55e18",border:"1px solid #22c55e33",borderRadius:6,padding:"2px 8px"}}>
-                      <span style={{fontSize:10,color:"#22c55e",fontWeight:700}}>✓ Resolved by {h.by}</span>
+                  {h.resolved&&(
+                    <div style={{marginTop:8,background:"#22c55e12",border:"1px solid #22c55e33",borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{fontSize:10,color:"#22c55e",fontWeight:700,marginBottom:2}}>✓ Resolved by {h.resolvedBy} · {h.resolvedAt}</div>
+                      {h.resolvedNote&&<div style={{fontSize:11,color:"#22c55e88"}}>{h.resolvedNote}</div>}
                     </div>
                   )}
                 </div>
