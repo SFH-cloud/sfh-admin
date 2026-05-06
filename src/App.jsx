@@ -740,7 +740,8 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
       let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SFH Daily Report</title><style>'+css+"</style></head><body>";
       html+='<div class="header"><div><div class="logo">Soho <span>House</span></div><div style="font-size:13px;color:#888;margin-top:4px">Operations Daily Report</div></div>';
       html+='<div><div class="date-badge">'+dateLabel+"</div><div style=\"font-size:11px;color:#aaa;text-align:right;margin-top:6px\">Generated "+new Date().toLocaleString("en-GB")+"</div></div></div>";
-      html+='<div class="stats"><div class="stat"><div class="stat-val">'+filteredLocs.length+'</div><div class="stat-label">Locations Cleaned</div></div><div class="stat"><div class="stat-val">'+dayTasks.filter(t=>t.status==="done").length+'</div><div class="stat-label">Tasks Completed</div></div><div class="stat"><div class="stat-val">'+dayCheckouts.length+'</div><div class="stat-label">Checkout Photos</div></div><div class="stat"><div class="stat-val">'+dayRepairs.length+"</div><div class=\"stat-label\">Repairs Reported</div></div></div>";
+      const totalPhotos=dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&p.dataUrl)).length;
+      html+='<div class="stats"><div class="stat"><div class="stat-val">'+filteredLocs.length+'</div><div class="stat-label">Locations Cleaned</div></div><div class="stat"><div class="stat-val">'+dayTasks.filter(t=>t.status==="done").length+'</div><div class="stat-label">Tasks Completed</div></div><div class="stat"><div class="stat-val">'+totalPhotos+'</div><div class="stat-label">Evidence Photos</div></div><div class="stat"><div class="stat-val">'+dayRepairs.length+"</div><div class=\"stat-label\">Repairs Reported</div></div></div>";
       html+=buildLocationsHtml(filteredLocs);
       html+=buildRepairsHtml();
       html+=buildInspectionsHtml();
@@ -775,7 +776,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
         </div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
-        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length,c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
+        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&p.dataUrl)).length,c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
           <div key={s.l} style={{background:"#111128",border:`1px solid ${s.c}22`,borderRadius:14,padding:"16px",textAlign:"center"}}>
             <div style={{fontSize:30,fontWeight:900,color:s.c,fontFamily:"Georgia,serif"}}>{s.v}</div>
             <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginTop:4}}>{s.l}</div>
@@ -1516,11 +1517,11 @@ function LiveLocations({liveLocations,allUsers}){
                       <div style={{position:"relative"}}>
                         <img src={s.photo} alt="location" style={{width:"100%",height:140,objectFit:"cover",display:"block"}}/>
                         <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,#000000dd)",padding:"10px 12px"}}>
-                          <div style={{fontSize:13,color:"#fff",fontWeight:800}}>{s.name}</div>
                           <div style={{fontSize:10,color:"#aaa",marginTop:1}}>{s.taskTitle||""}{s.taskTitle?" · ":""}since {s.time}</div>
                         </div>
-                        {/* Role badge top-right */}
-                        <div style={{position:"absolute",top:8,right:8}}>
+                        {/* Name top-right, same colour as location label */}
+                        <div style={{position:"absolute",top:8,right:8,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                          <div style={{background:"#000000aa",borderRadius:6,padding:"3px 8px",fontSize:11,color:color,fontWeight:800}}>{s.name}</div>
                           <Badge label={s.role} color={color} sm/>
                         </div>
                       </div>
