@@ -1185,9 +1185,11 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
 
           {/* Actions */}
           {(()=>{
-            // "Approve" available when: task done OR all checklist items inspected OK
-            const allOk = total>0 && Object.keys(inspState).length===total && !hasIssues;
-            const canApprove = (task.status==="done"||allOk) && task.approvedAt==null;
+            // "Approve" available when:
+            // 1. Task is done (no inspection needed), OR
+            // 2. All checklist items inspected and none have issues
+            const allOk = total===0 || (Object.keys(inspState).length===total && !hasIssues);
+            const canApprove = task.approvedAt==null && (task.status==="done" || allOk);
             const isApproved = !!task.approvedAt;
             return(
               <div style={{display:"flex",gap:8,flexDirection:"column"}}>
@@ -1207,7 +1209,7 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                     }}
                     disabled={!canApprove}
                     style={{width:"100%",padding:"13px",background:canApprove?"#22c55e":"#1e1e38",border:`1px solid ${canApprove?"#22c55e":"#252540"}`,borderRadius:10,color:canApprove?"#000":"#333",fontWeight:800,fontSize:13,cursor:canApprove?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                    ✅ {canApprove?"Approve Task":"Inspect all items first"}
+                    ✅ {task.status!=="done" && !allOk ? "Mark all items OK first" : "Approve Task"}
                   </button>
                 ):(
                   <div style={{background:"#22c55e18",border:"1px solid #22c55e44",borderRadius:10,padding:"11px",textAlign:"center"}}>
