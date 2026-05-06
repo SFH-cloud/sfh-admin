@@ -908,6 +908,16 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
             </div>
             <button onClick={onClose} style={{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>✕</button>
           </div>
+          {/* Return badge if task was sent back */}
+          {(task.inspectionNote||task.inspectionHistory?.length>0)&&(
+            <div style={{background:"#ef444415",border:"1px solid #ef444444",borderRadius:8,padding:"8px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>⚠️</span>
+              <div>
+                <div style={{fontSize:11,color:"#ef4444",fontWeight:800}}>Returned for correction {task.inspectionHistory?.length>1?`(${task.inspectionHistory.length}x)`:""}</div>
+                <div style={{fontSize:10,color:"#ef444488"}}>See history below</div>
+              </div>
+            </div>
+          )}
           {/* Status + Priority row */}
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <Badge label={task.priority} color={pc} sm/>
@@ -1023,6 +1033,29 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
             </div>
           )}
 
+          {/* Inspection History */}
+          {task.inspectionHistory&&task.inspectionHistory.length>0&&(
+            <div style={{background:"#0a0a1a",border:"1px solid #ef444433",borderRadius:12,padding:"14px",marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#ef4444",marginBottom:10}}>
+                ⚠️ Return History ({task.inspectionHistory.length})
+              </div>
+              {task.inspectionHistory.map((h,i)=>(
+                <div key={i} style={{marginBottom:i<task.inspectionHistory.length-1?12:0,paddingBottom:i<task.inspectionHistory.length-1?12:0,borderBottom:i<task.inspectionHistory.length-1?"1px solid #1e1e38":"none"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:10,color:"#ef4444",fontWeight:700}}>Return #{i+1}</span>
+                    <span style={{fontSize:10,color:"#555"}}>{h.date}</span>
+                  </div>
+                  <div style={{fontSize:12,color:"#ccc",whiteSpace:"pre-wrap",lineHeight:1.5}}>{h.note}</div>
+                  {task.status==="done"&&i===task.inspectionHistory.length-1&&(
+                    <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,background:"#22c55e18",border:"1px solid #22c55e33",borderRadius:6,padding:"2px 8px"}}>
+                      <span style={{fontSize:10,color:"#22c55e",fontWeight:700}}>✓ Resolved by {h.by}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Created info */}
           <div style={{fontSize:10,color:"#333",marginBottom:20}}>
             Created: {task.createdAt?new Date(task.createdAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
@@ -1056,10 +1089,18 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                     <button
                       onClick={()=>{
                         const issueLabels=Object.entries(inspState).filter(([,v])=>v==="issue").map(([i])=>task.checklist[i]?.label).filter(Boolean);
+                        const note="⚠️ Issues found by management:\n"+issueLabels.map(l=>"• "+l).join("\n")+(inspComment?"\n\nComment: "+inspComment:"");
+                        const historyEntry={
+                          date:new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}),
+                          note,
+                          by:allUsers.find(x=>x.id===task.assigneeId)?.name||"Staff",
+                          type:"sent_back",
+                        };
                         onSendBack({
                           ...task,
                           status:"pending",
-                          inspectionNote:"⚠️ Issues found by management:\n"+issueLabels.map(l=>"• "+l).join("\n")+(inspComment?"\n\nComment: "+inspComment:""),
+                          inspectionNote:note,
+                          inspectionHistory:[...(task.inspectionHistory||[]),historyEntry],
                           updatedAt:new Date().toISOString(),
                         });
                         onClose();
@@ -1163,11 +1204,14 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
                       <Av name={u?.name||"?"} size={36} color={rc}/>
                       <div style={{flex:1}}>
                         <div style={{color:"#fff",fontSize:14,fontWeight:700}}>{u?.name||"Unassigned"}</div>
-                        <div style={{display:"flex",gap:10,marginTop:3}}>
+                        <div style={{display:"flex",gap:10,marginTop:3,flexWrap:"wrap"}}>
                           {pending>0&&<span style={{fontSize:10,color:"#f97316"}}>⏳ {pending} pending</span>}
                           {inprog>0&&<span style={{fontSize:10,color:"#3b82f6"}}>▶ {inprog} in progress</span>}
                           {done>0&&<span style={{fontSize:10,color:"#22c55e"}}>✓ {done} done</span>}
                           {allDone&&<span style={{fontSize:10,color:"#22c55e",fontWeight:700}}>✓ All complete</span>}
+                          {userTasks.some(t=>t.inspectionNote||t.inspectionHistory?.length>0)&&(
+                            <span style={{fontSize:10,color:"#ef4444",fontWeight:700,background:"#ef444415",padding:"1px 6px",borderRadius:4}}>⚠️ {userTasks.filter(t=>t.inspectionNote||t.inspectionHistory?.length>0).length} return(s)</span>
+                          )}
                         </div>
                       </div>
                       {/* Progress bar */}
@@ -1199,7 +1243,10 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
                               onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
                               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                               <div>
-                                <div style={{color:"#fff",fontSize:12,fontWeight:600}}>{typeEm[t.type]||"📋"} {t.roundId&&t.location?t.location:t.title}</div>
+                                <div style={{color:"#fff",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+                                  {typeEm[t.type]||"📋"} {t.roundId&&t.location?t.location:t.title}
+                                  {(t.inspectionNote||t.inspectionHistory?.length>0)&&<span style={{background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>⚠️ return</span>}
+                                </div>
                                 {t.roundId&&<div style={{fontSize:9,color:"#a78bfa",marginTop:1}}>🔄 Round · Area {t.roundArea}/{t.roundTotal}</div>}
                                 {prog!==null&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
                                   <div style={{width:50,height:3,background:"#1e1e38",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${prog}%`,background:rc,borderRadius:3}}/></div>
