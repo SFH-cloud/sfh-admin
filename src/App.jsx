@@ -193,7 +193,8 @@ const sendPush = async (userIds, notification) => {
     const subs = (await Promise.all(
       userIds.map(id => stor.get('sh5_push_' + id))
     )).filter(Boolean);
-    if (!subs.length) { console.log('No push subs for', userIds); return; }
+    if (!subs.length) { console.log('No push subs for', userIds); return {sent:0,info:'no subscriptions'}; }
+    console.log('Sending push to', userIds, 'subs:', subs.length, 'notification:', JSON.stringify(notification));
     const res = await fetch(EDGE_URL, {
       method: 'POST',
       headers: {
@@ -202,10 +203,12 @@ const sendPush = async (userIds, notification) => {
       },
       body: JSON.stringify({ subscriptions: subs, notification }),
     });
-    const data = await res.json().catch(()=>({raw:res.status}));
-    console.log('Push result:', JSON.stringify(data));
+    const text = await res.text();
+    console.log('Push HTTP status:', res.status, 'body:', text.slice(0,300));
+    let data;
+    try { data = JSON.parse(text); } catch { data = {raw: text.slice(0,200), status: res.status}; }
     return data;
-  } catch(e) { console.log('Push failed:', e); return {error:String(e)}; }
+  } catch(e) { console.log('Push failed:', e.name, e.message); return {error:String(e)}; }
 };
 
 
@@ -2487,12 +2490,8 @@ export default function AdminPanel(){
           <div style={{fontSize:9,color:"#333",marginBottom:6}}>Last: {lastSync||"—"}</div>
           <button onClick={loadAll} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>↻ Refresh</button>
           <button onClick={async()=>{
-            const result=await sendPush(["u14"],{title:"🧪 Test Push",body:"Push notifications are working!",tag:"test-push",url:"/"});
-            // Check log after 2s
-            setTimeout(async()=>{
-              const log=await stor.get("sh5_push_log_last");
-              alert("Push sent! Check admin console for Apple response. Result: "+JSON.stringify(result));
-            },2000);
+            const result=await sendPush(["u14"],{title:"🧪 SFH Test",body:"Push notification test for Khrystyna",tag:"test-push",url:"/"});
+            alert("Result: "+JSON.stringify(result)+"\n\nCheck browser console (F12) for HTTP status details.");
           }} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #38bdf833",borderRadius:8,color:"#38bdf8",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>🧪 Test Push (Khrystyna)</button>
           <button onClick={async()=>{
             if(!confirm("Archive all completed tasks to Inspections? This will use yesterday's date as the shift date."))return;
