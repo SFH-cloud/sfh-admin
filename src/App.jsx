@@ -183,6 +183,29 @@ const SK = {
   rounds:"sh5_rounds",
 };
 
+// ─── Push notification helper ────────────────────────────────────────────────
+const EDGE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co/functions/v1/push-notify";
+
+const sendPush = async (userIds, notification) => {
+  try {
+    // Collect subscriptions for given user IDs
+    const subs = (await Promise.all(
+      userIds.map(id => stor.get('sh5_push_' + id))
+    )).filter(Boolean);
+    if (!subs.length) return;
+    await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZmhiY2N5ZGFsdGVicG5mcXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MzAyOTIsImV4cCI6MjA5MzUwNjI5Mn0.uY4dwnTFqs1F43SMc9JChEta5PfQu4202LZ5owQ6Prc`,
+      },
+      body: JSON.stringify({ subscriptions: subs, notification }),
+    });
+  } catch(e) { console.log('Push failed:', e); }
+};
+
+
+
 const uid=()=>"_"+Date.now()+Math.random().toString(36).slice(2,5);
 const tod=()=>new Date().toISOString().slice(0,10);
 const df=d=>d?new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"—";
@@ -1125,12 +1148,22 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                           by:allUsers.find(x=>x.id===task.assigneeId)?.name||"Staff",
                           type:"sent_back",
                         };
-                        onSendBack({
+                        const updatedTask={
                           ...task,
                           status:"pending",
                           inspectionNote:note,
                           inspectionHistory:[...(task.inspectionHistory||[]),historyEntry],
                           updatedAt:new Date().toISOString(),
+                        };
+                        onSendBack(updatedTask);
+                        // Push notification to assignee
+                        sendPush([task.assigneeId],{
+                          title:"⚠️ Task Returned for Correction",
+                          body: (task.roundId&&task.location?task.location:task.title) + " — management found issues. Please review and correct.",
+                          tag:"return-"+task.id,
+                          requireInteraction:true,
+                          url:"/",
+                          taskId:task.id,
                         });
                         onClose();
                       }}
@@ -2309,6 +2342,24 @@ export default function AdminPanel(){
   const handleLogout=async()=>{await stor.del(SK.adminSess);setAdminUser(null);};
 
   const saveTasks  =async t=>{await stor.set(SK.tasks,t);setTasks(t);};
+  // Send push when new tasks are added
+  const saveTasksWithNotify=async(newTasks, prevTasks)=>{
+    await stor.set(SK.tasks,newTasks);
+    setTasks(newTasks);
+    // Find newly added tasks
+    const added=newTasks.filter(t=>!prevTasks.find(p=>p.id===t.id));
+    // Group by assignee
+    const byAssignee={};
+    added.forEach(t=>{if(!byAssignee[t.assigneeId])byAssignee[t.assigneeId]=[];byAssignee[t.assigneeId].push(t);});
+    for(const [uid,ts] of Object.entries(byAssignee)){
+      sendPush([uid],{
+        title:"📋 New Task Assigned",
+        body: ts.length===1 ? (ts[0].roundId&&ts[0].location?ts[0].location:ts[0].title) : `${ts.length} new tasks assigned to you`,
+        tag:"new-task-"+uid,
+        url:"/",
+      });
+    }
+  };
   const saveRepairs=async r=>{await stor.set(SK.repairs,r);setRepairs(r);};
   const saveOrders =async o=>{await stor.set(SK.orders,o);setOrders(o);};
 
@@ -2398,7 +2449,7 @@ export default function AdminPanel(){
       </div>
       <div style={{flex:1,padding:"32px",overflowX:"auto",overflowY:"auto"}}>
         {tab==="overview"      &&<Overview tasks={tasks} repairs={repairs} orders={orders} inspections={inspections} liveLocations={liveLocations} allUsers={allUsers} onNav={tabId=>setTab(tabId)}/>}
-        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasks([...tasks,t])} onCreateMultiple={newTasks=>saveTasks([...tasks,...newTasks])} onUpdate={t=>saveTasks(tasks.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasks.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
+        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasksWithNotify([...tasks,t],tasks)} onCreateMultiple={newTasks=>saveTasksWithNotify([...tasks,...newTasks],tasks)} onUpdate={t=>saveTasks(tasks.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasks.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
         {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
