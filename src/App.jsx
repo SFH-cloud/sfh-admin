@@ -1,0 +1,1737 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+
+// ═══════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════
+const BASE_USERS = [
+  {id:"u2", name:"Frantisek Kabilka",        role:"management", pin:"38516", nfc:"NFC-MGT-002"},
+  {id:"u3", name:"Camila Dalcin",            role:"management", pin:"92047", nfc:"NFC-MGT-003"},
+  {id:"u4", name:"Munish Soni",              role:"reception",  pin:"61385", nfc:"NFC-REC-001"},
+  {id:"u5", name:"Ramneek Kaur",             role:"reception",  pin:"29734", nfc:"NFC-REC-002"},
+  {id:"u6", name:"Sajin Abraham",            role:"reception",  pin:"85162", nfc:"NFC-REC-003"},
+  {id:"u7", name:"Simbarashe Manyati",       role:"porter",     pin:"43809", nfc:"NFC-PRT-001"},
+  {id:"u8", name:"Cristiano Melo",           role:"porter",     pin:"17653", nfc:"NFC-PRT-002"},
+  {id:"u9", name:"Joanna Rejak",             role:"cleaner",    pin:"56420", nfc:"NFC-CLN-001"},
+  {id:"u10",name:"Hilario Ximenes",          role:"cleaner",    pin:"30978", nfc:"NFC-CLN-002"},
+  {id:"u11",name:"Antonio Felisbino",        role:"cleaner",    pin:"84215", nfc:"NFC-CLN-003"},
+  {id:"u12",name:"Danielli Sanches Magrini", role:"cleaner",    pin:"67043", nfc:"NFC-CLN-004"},
+  {id:"u13",name:"Leandro Morilla",          role:"cleaner",    pin:"19862", nfc:"NFC-CLN-005"},
+  {id:"u14",name:"Khrystyna Kolodii",        role:"cleaner",    pin:"52307", nfc:"NFC-CLN-006"},
+  {id:"u15",name:"Amandeep Singh",           role:"cleaner",    pin:"73614", nfc:"NFC-CLN-007"},
+];
+const FRANTISEK_ID = "u2";
+
+const CLEANER_LOCATIONS = [
+  "Workshop","Flowers","Soho Home","Gym","Sauna & Steam Room",
+  "Boathouse","Pen Yen","Hay Barn","Barwell","Canteen",
+  "Main Barn","Mill + Toilets","Glasshouse","Cinema",
+  "Canteen Office","Check-out House","Gate House",
+  "Club Reception + Office","Berenjak","Blake's",
+];
+
+// Role-based location menus with pre-filled task templates
+const ROLE_LOCATIONS = {
+  cleaner: CLEANER_LOCATIONS.map(l=>({name:l, tasks:[]})),
+  porter: [
+    {name:"Barwell",             tasks:["Guest Transport"]},
+    {name:"Glasshouse",          tasks:["Guest Transport"]},
+    {name:"Check-in House",      tasks:["Restock Firewood","Restock Water Bottles","Clean Fireplace","Park Guest Cars","Sweep Entrance","Salt the Pathway"]},
+    {name:"Check-out House",     tasks:["Restock Firewood","Restock Water Bottles","Clean Fireplace","Sweep Entrance","Salt the Pathway"]},
+    {name:"Club Reception",      tasks:["Guest Transport","Restock Water Bottles","Sweep Entrance","Salt the Reception Area"]},
+    {name:"Car Park",            tasks:["Litter Pick","Sweep Gravel Back into Bays"]},
+    {name:"Bikes — Cabins",          tasks:["Collect Bike Truck", "Complete Truck Safety Checks", "Collect Bikes from Around Site", "Quick Visual Safety Check of Bikes", "Replenish Bikes at Location", "Clean & Sanitise Bike Truck", "Return Truck to Warehouse & Connect to Charging", "Log Any Repairs on Bulb Things & Place by Bike Shed"]},
+    {name:"Bikes — Huts",            tasks:["Collect Bike Truck", "Complete Truck Safety Checks", "Collect Bikes from Around Site", "Quick Visual Safety Check of Bikes", "Replenish Bikes at Location", "Clean & Sanitise Bike Truck", "Return Truck to Warehouse & Connect to Charging", "Log Any Repairs on Bulb Things & Place by Bike Shed"]},
+    {name:"Bikes — Piglets",         tasks:["Collect Bike Truck", "Complete Truck Safety Checks", "Collect Bikes from Around Site", "Quick Visual Safety Check of Bikes", "Replenish Bikes at Location", "Clean & Sanitise Bike Truck", "Return Truck to Warehouse & Connect to Charging", "Log Any Repairs on Bulb Things & Place by Bike Shed"]},
+    {name:"Bikes — Gym & Boathouse", tasks:["Collect Bike Truck", "Complete Truck Safety Checks", "Collect Bikes from Around Site", "Quick Visual Safety Check of Bikes", "Replenish Bikes at Location", "Clean & Sanitise Bike Truck", "Return Truck to Warehouse & Connect to Charging", "Log Any Repairs on Bulb Things & Place by Bike Shed"]},
+    {name:"Bikes — Spa Area",        tasks:["Collect Bike Truck", "Complete Truck Safety Checks", "Collect Bikes from Around Site", "Quick Visual Safety Check of Bikes", "Replenish Bikes at Location", "Clean & Sanitise Bike Truck", "Return Truck to Warehouse & Connect to Charging", "Log Any Repairs on Bulb Things & Place by Bike Shed"]},
+    {name:"Bikes — Club Reception",  tasks:["Collect Bike Truck", "Complete Truck Safety Checks", "Collect Bikes from Around Site", "Quick Visual Safety Check of Bikes", "Replenish Bikes at Location", "Clean & Sanitise Bike Truck", "Return Truck to Warehouse & Connect to Charging", "Log Any Repairs on Bulb Things & Place by Bike Shed"]},
+    {name:"Stables",             tasks:["Sweep","Empty Bins","Full Clean"]},
+    {name:"Newspapers",          tasks:["Deliver to Room Service Station"]},
+    {name:"Floats",              tasks:["Clean & Store Floats","Restock Water Bottles","Restock Umbrellas","Connect to Charging"]},
+    {name:"General — Other",   tasks:["Sweep Under Bike Racks","Restock Umbrellas","Restock Maps","Restock Napkins for Main Barn"]},
+  ],
+  reception: [
+    {name:"Club Reception", tasks:["DM Brief Done","A5s Done","Daily Opera Reports Saved","Gym Classes & Events added on GH Daily Brief","Batch Deposit Done","Night Audit","Restock Maps","Restock Umbrellas"], autoAssign:true},
+    {name:"Gate House",     tasks:["Review Tags for next day","Tags for day after tomorrow","KC picture","Restock Maps","Restock Umbrellas","A5's rules"], autoAssign:true},
+    {name:"General",        tasks:[]},
+  ],
+};
+
+const ALL_LOCATIONS = [...new Set([
+  ...CLEANER_LOCATIONS,
+  ...ROLE_LOCATIONS.porter.map(l=>l.name),
+  ...ROLE_LOCATIONS.reception.map(l=>l.name),
+])];
+
+const ALL_TEMPLATES = {
+  "Float Check":["Is the Float charged?","Is the float clean?","Brakes & Handbrake","Mirrors","Tires","Lights","Step Function","Check For Damage","Photo uploaded"],
+  "Gatehouse Duties":["Refill Log Baskets","Clean Fireplace (GH + CO)","Check Stables","Refill Water Stations","Are there Cars to be parked?","Are there any scheduled pickups?","Clear excessive bikes"],
+  "Club Reception / Main Area":["Sweeping stones","Clear area of obstacles","Clear litter / Glasses","Check bike Racks","Sweep Club entry way","Refill Water Stations"],
+  "Car Park Duties":["Litter Pick","Check bins not overflowing","Clearing Bikes to Club racks","Sweep stones back into bays","Check Car Wash area","Sweep Murray's Path"],
+  "Bikes":["Collect Bike truck","Complete truck safety Checks","Collect bikes from around site","Quick visual bike safety check","Replenish cabin, Huts, Piglets, GR","Clean & Sanitise bike truck","Place on charge at Warehouse","Log repairs on Bulb Things"],
+  "End of Shift":["Take Newspapers to Room Service","Floats back on charge","Ensure floats clean","New Damage Checks","Hand Over to Early Shift","Photo uploaded"],
+  "Daily Clean":["Vacuum all areas","Mop hard floors","Empty bins","Clean & sanitise toilets","Restock soap & paper towels","Wipe down all surfaces","Polish mirrors & glass"],
+  "Deep Clean":["Move furniture and clean underneath","Clean light fixtures","Wash windows interior","Scrub grout and tile","Clean vents and filters","Polish all fixtures","Sanitise high-touch surfaces"],
+  "Club Reception — Daily Checklist":["DM Brief Done","A5s Done","Daily Opera Reports Saved","Gym Classes & Events added on GH Daily Brief","Batch Deposit Done","Night Audit","Restock Maps","Restock Umbrellas"],
+  "Gate House — Daily Checklist":["Review Tags for next day","Tags for day after tomorrow","KC picture","Restock Maps","Restock Umbrellas","A5's rules"],
+  "Stables":["Sweep","Empty Bins","Full Clean"],
+  "Floats":["Clean & Store Floats","Restock Water Bottles","Restock Umbrellas","Connect to Charging"],
+  "Newspapers":["Deliver to Room Service Station"],
+  "Porter — General Duties":["Sweep Under Bike Racks","Restock Umbrellas","Restock Maps","Restock Napkins for Main Barn"],
+};
+
+// ═══════════════════════════════════════════════════════════
+// PREDEFINED ROUNDS
+// ═══════════════════════════════════════════════════════════
+const DEFAULT_ROUNDS = [
+  // ── CLEANERS ──────────────────────────────────────────
+  {
+    id:"C-R1-P1", dept:"cleaner", name:"Round 1 — Cleaner 1", position:"Cleaner 1",
+    areas:["Boathouse","Sauna & Steam Room","Gym","Pen Yen","Check-out House","Gate House","Hay Barn","Glasshouse"],
+    focus:"Vacuuming & Mopping — all floor surfaces",
+    tasks:["Vacuum all floor surfaces","Mop all hard floors","Move chairs/furniture and vacuum underneath","Check vacuum bags and replace if needed"],
+    colour:"#4ade80",
+  },
+  {
+    id:"C-R1-P2", dept:"cleaner", name:"Round 1 — Cleaner 2", position:"Cleaner 2",
+    areas:["Boathouse","Sauna & Steam Room","Gym","Pen Yen","Check-out House","Gate House","Hay Barn","Glasshouse"],
+    focus:"Toilets · Thresholds · Surfaces · Dusting · Windows · Mirrors",
+    tasks:["Clean & sanitise all toilets","Clean thresholds and doorframes","Wipe down all surfaces","Dust shelves, ledges and fixtures","Clean windows and glass panels","Polish all mirrors","Restock soap and paper towels","Empty bins"],
+    colour:"#4ade80",
+  },
+  {
+    id:"C-R2-P1", dept:"cleaner", name:"Round 2 — Cleaner 1", position:"Cleaner 1",
+    areas:["Canteen","Canteen Office","Club Reception + Office","Berenjak","Main Barn","Mill + Toilets","Barwell","Cinema"],
+    focus:"Vacuuming & Mopping — all floor surfaces",
+    tasks:["Vacuum all floor surfaces","Mop all hard floors","Move chairs/furniture and vacuum underneath","Check vacuum bags and replace if needed"],
+    colour:"#4ade80",
+  },
+  {
+    id:"C-R2-P2", dept:"cleaner", name:"Round 2 — Cleaner 2", position:"Cleaner 2",
+    areas:["Canteen","Canteen Office","Club Reception + Office","Berenjak","Main Barn","Mill + Toilets","Barwell","Cinema"],
+    focus:"Toilets · Thresholds · Surfaces · Dusting · Windows · Mirrors",
+    tasks:["Clean & sanitise all toilets","Clean thresholds and doorframes","Wipe down all surfaces","Dust shelves, ledges and fixtures","Clean windows and glass panels","Polish all mirrors","Restock soap and paper towels","Empty bins"],
+    colour:"#4ade80",
+  },
+  // ── PORTERS ──────────────────────────────────────────
+  {
+    id:"P-R1-P1", dept:"porter", name:"Round 1 — Porter 1", position:"Porter 1",
+    areas:["Gate House","Check-out House","Bikes — Cabins","Bikes — Huts","Bikes — Piglets","Bikes — Gym & Boathouse","Bikes — Spa Area","Bikes — Club Reception"],
+    focus:"Gate House duties · Check-out House duties · Full Bike round",
+    tasks:["Gate House — complete daily checklist","Check-out House — complete daily checklist","Collect Bike Truck","Complete Truck Safety Checks","Collect Bikes from Around Site","Quick Visual Safety Check of Bikes","Replenish Bikes at all Locations","Clean & Sanitise Bike Truck","Return Truck to Warehouse & Connect to Charging","Log Any Repairs on Bulb Things & Place by Bike Shed"],
+    colour:"#fb923c",
+  },
+  {
+    id:"P-R1-P2", dept:"porter", name:"Round 1 — Porter 2", position:"Porter 2",
+    areas:["Club Reception","Car Park","Stables","Barwell","Glasshouse"],
+    focus:"Club Reception area · Guest Transport & Parking · Car Park · Stables",
+    tasks:["Club Reception — Guest Transport","Club Reception — Restock Water Bottles","Club Reception — Sweep Entrance","Club Reception — Salt the Reception Area","Guest Transport — Barwell","Guest Transport — Glasshouse","Car Park — Litter Pick","Car Park — Sweep Gravel Back into Bays","Stables — Sweep","Stables — Empty Bins","Stables — Full Clean"],
+    colour:"#fb923c",
+  },
+];
+
+const SK_ROUNDS = "sh5_rounds";
+
+
+
+// ═══════════════════════════════════════════════════════════
+// SUPABASE — hardcoded, no changes needed
+// ═══════════════════════════════════════════════════════════
+const SUPABASE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZmhiY2N5ZGFsdGVicG5mcXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MzAyOTIsImV4cCI6MjA5MzUwNjI5Mn0.uY4dwnTFqs1F43SMc9JChEta5PfQu4202LZ5owQ6Prc";
+
+const _h = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
+};
+
+const stor = {
+  get: async (k) => {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/sfh_data?key=eq.${encodeURIComponent(k)}&select=value`, {headers:_h});
+      const d = await r.json();
+      if (!Array.isArray(d) || !d.length) return null;
+      return d[0].value;
+    } catch { return null; }
+  },
+  set: async (k, v) => {
+    if (v === null || v === undefined) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/sfh_data`, {
+        method:"POST",
+        headers:{..._h,"Prefer":"resolution=merge-duplicates"},
+        body:JSON.stringify({key:k, value:v}),
+      });
+    } catch {}
+  },
+  del: async (k) => {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/sfh_data?key=eq.${encodeURIComponent(k)}`, {method:"DELETE",headers:_h});
+    } catch {}
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+// STORAGE KEYS
+// ═══════════════════════════════════════════════════════════
+const SK = {
+  tasks:"sh5_tasks", repairs:"sh5_repairs", orders:"sh5_orders",
+  inspections:"sh5_inspections", profiles:"sh5_profiles",
+  checkouts:"sh5_checkouts", locPrefix:"sh5_loc:",
+  adminSess:"sh5_admin_session", pins:"sh5_pins",
+  rounds:"sh5_rounds",
+};
+
+const uid=()=>"_"+Date.now()+Math.random().toString(36).slice(2,5);
+const tod=()=>new Date().toISOString().slice(0,10);
+const df=d=>d?new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"—";
+const dfShort=d=>d?new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):"—";
+
+const RC={management:"#d4a843",reception:"#38bdf8",porter:"#fb923c",cleaner:"#4ade80"};
+const PC={urgent:"#ef4444",high:"#f97316",medium:"#eab308",low:"#6b7280"};
+const SC={pending:"#6b7280",in_progress:"#3b82f6",done:"#22c55e"};
+const RL={management:"Management",reception:"Reception",porter:"Porter",cleaner:"Cleaner"};
+const ROLES=["management","reception","porter","cleaner"];
+
+// ═══════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════
+const Av=({name,size=32,color="#d4a843"})=>
+  <div style={{width:size,height:size,borderRadius:"50%",flexShrink:0,background:`${color}22`,border:`2px solid ${color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.3,fontWeight:900,color,fontFamily:"Georgia,serif"}}>{name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>;
+
+const Badge=({label,color,sm})=>
+  <span style={{display:"inline-block",padding:sm?"2px 7px":"3px 11px",borderRadius:20,fontSize:sm?10:11,fontWeight:700,letterSpacing:.5,background:`${color}20`,color,border:`1px solid ${color}40`,textTransform:"uppercase",whiteSpace:"nowrap"}}>{label}</span>;
+
+const I={background:"#0d0d1e",border:"1px solid #252540",borderRadius:10,padding:"10px 13px",color:"#fff",fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"};
+const L={fontSize:10,color:"#666",textTransform:"uppercase",letterSpacing:1.2,marginBottom:6,display:"block",fontWeight:700};
+
+function Modal({title,onClose,children,wide=false}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000b0",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:wide?820:620,maxHeight:"92vh",overflow:"auto",padding:"28px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
+          <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>{title}</div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:"#666",cursor:"pointer",fontSize:22}}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN LOGIN
+// ═══════════════════════════════════════════════════════════
+function AdminLogin({onLogin,allUsers,pins}){
+  const [selected,setSelected]=useState(null);
+  const [pin,setPin]=useState("");
+  const [error,setError]=useState("");
+  const mgmt=allUsers.filter(u=>u.role==="management");
+  const accent="#d4a843";
+
+  const getPin=(u)=>pins[u.id]||u.pin;
+
+  const pick=u=>{setSelected(u);setPin("");setError("");};
+  const handleKey=k=>{
+    if(k==="del"){setPin(p=>p.slice(0,-1));setError("");return;}
+    if(pin.length>=5)return;
+    const next=pin+k;setPin(next);
+    if(next.length===5){
+      setTimeout(()=>{
+        if(next===getPin(selected))onLogin(selected);
+        else{setError("Incorrect PIN. Try again.");setPin("");}
+      },120);
+    }
+  };
+
+  // Keyboard support — digits + Backspace
+  useEffect(()=>{
+    if(!selected)return;
+    const onKey=e=>{
+      if(e.key==="Backspace"){handleKey("del");return;}
+      if(/^[0-9]$/.test(e.key)){handleKey(e.key);}
+    };
+    window.addEventListener("keydown",onKey);
+    return()=>window.removeEventListener("keydown",onKey);
+  },[selected,pin]);
+
+  if(selected)return(
+    <div style={{minHeight:"100vh",background:"#070714",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"'DM Sans',sans-serif"}}>
+      <button onClick={()=>{setSelected(null);setPin("");setError("");}} style={{position:"absolute",top:24,left:24,background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>← Back</button>
+      <div style={{width:72,height:72,borderRadius:"50%",background:`${accent}25`,border:`3px solid ${accent}60`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,color:accent,fontFamily:"Georgia,serif",marginBottom:16}}>
+        {selected.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
+      </div>
+      <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>{selected.name}</div>
+      <div style={{marginTop:6,fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:2}}>Management</div>
+      <div style={{display:"flex",gap:14,marginTop:32}}>
+        {[0,1,2,3,4].map(i=><div key={i} style={{width:14,height:14,borderRadius:"50%",background:pin.length>i?accent:"transparent",border:`2px solid ${pin.length>i?accent:"#333"}`,transition:"all .15s"}}/>)}
+      </div>
+      <div style={{fontSize:11,color:"#555",marginTop:10}}>Enter 5-digit PIN — use numpad or keyboard</div>
+      {error&&<div style={{color:"#ef4444",fontSize:12,marginTop:6,fontWeight:600}}>{error}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginTop:24,width:240}}>
+        {["1","2","3","4","5","6","7","8","9","","0","del"].map((k,i)=>(
+          <button key={i} onClick={()=>k&&handleKey(k)} style={{height:58,borderRadius:14,background:k==="del"?"transparent":k?`${accent}12`:"transparent",border:k==="del"?`1px solid #333`:k?`1px solid ${accent}30`:"none",color:k==="del"?"#888":k?accent:"transparent",fontSize:k==="del"?20:22,fontWeight:700,cursor:k?"pointer":"default",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {k==="del"?"⌫":k}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:"#070714",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{textAlign:"center",marginBottom:40}}>
+        <div style={{fontSize:10,letterSpacing:6,color:"#444",textTransform:"uppercase",marginBottom:10}}>Soho House</div>
+        <div style={{fontSize:30,fontWeight:900,color:accent,fontFamily:"Georgia,serif"}}>Management Portal</div>
+        <div style={{width:40,height:2,background:`${accent}44`,margin:"12px auto 0"}}/>
+        <div style={{fontSize:12,color:"#444",marginTop:12}}>Access restricted to management only</div>
+      </div>
+      <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10}}>
+        {mgmt.map(u=>(
+          <button key={u.id} onClick={()=>pick(u)} style={{display:"flex",alignItems:"center",gap:14,background:"#0d0d1e",border:`1px solid ${accent}22`,borderRadius:14,padding:"14px 18px",cursor:"pointer",textAlign:"left",transition:"all .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=`${accent}12`;e.currentTarget.style.borderColor=`${accent}66`;}}
+            onMouseLeave={e=>{e.currentTarget.style.background="#0d0d1e";e.currentTarget.style.borderColor=`${accent}22`;}}>
+            <div style={{width:46,height:46,borderRadius:"50%",background:`${accent}25`,border:`2px solid ${accent}60`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:accent,fontFamily:"Georgia,serif",flexShrink:0}}>
+              {u.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
+            </div>
+            <div>
+              <div style={{color:"#fff",fontSize:15,fontWeight:700}}>{u.name}</div>
+              <div style={{color:"#555",fontSize:11,marginTop:2}}>
+                "Manager"
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// TASK MODAL — with Round selector replacing Recurring
+// ═══════════════════════════════════════════════════════════
+function TaskModal({task:existing,users,rounds=[],onSave,onSaveMultiple,onClose}){
+  const blank={title:"",type:"general",priority:"medium",location:"",assigneeId:"",notes:"",checklist:[]};
+  const [form,setForm]=useState(existing?{...existing}:blank);
+  const [ci,setCi]=useState("");
+  const [tmpl,setTmpl]=useState("");
+  const [selectedRound,setSelectedRound]=useState("");
+  const [roundMode,setRoundMode]=useState(false); // true = filled from round
+
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+
+  const assigneeRole=users.find(u=>u.id===form.assigneeId)?.role||"";
+
+  const availableLocations=assigneeRole==="porter"
+    ?ROLE_LOCATIONS.porter
+    :assigneeRole==="reception"
+    ?ROLE_LOCATIONS.reception
+    :assigneeRole==="cleaner"
+    ?ROLE_LOCATIONS.cleaner
+    :CLEANER_LOCATIONS.map(l=>({name:l,tasks:[]}));
+
+  const handleLocationChange=(locName)=>{
+    if(roundMode)return; // round controls location
+    set("location",locName);
+    const locDef=availableLocations.find(l=>(l.name||l)===locName);
+    if(locDef&&locDef.tasks&&locDef.tasks.length>0){
+      setForm(f=>({...f,location:locName,checklist:locDef.tasks.map(t=>({label:t,done:false}))}));
+    }
+  };
+
+  // Apply a predefined round — fills title, locations summary, checklist
+  const applyRound=(roundId)=>{
+    setSelectedRound(roundId);
+    if(!roundId){setRoundMode(false);return;}
+    const r=rounds.find(r=>r.id===roundId);
+    if(!r)return;
+    setRoundMode(true);
+    setForm(f=>({
+      ...f,
+      title: r.name,
+      type: r.dept==="porter"?"porter":"checklist",
+      // location = first area (staff work through all areas in the round)
+      location: r.areas[0]||f.location,
+      notes: `Round: ${r.name}
+Position: ${r.position}
+Focus: ${r.focus}
+All areas: ${r.areas.join(", ")}`,
+      checklist: r.tasks.map(t=>({label:t,done:false})),
+    }));
+  };
+
+  const clearRound=()=>{
+    setSelectedRound("");setRoundMode(false);
+    setForm(f=>({...f,title:"",notes:"",checklist:[],location:""}));
+  };
+
+  const applyTmpl=name=>{
+    if(!name)return;
+    setForm(f=>({...f,checklist:ALL_TEMPLATES[name].map(l=>({label:l,done:false}))}));
+    setTmpl(name);
+  };
+  const addCI=()=>{if(!ci.trim())return;setForm(f=>({...f,checklist:[...f.checklist,{label:ci.trim(),done:false}]}));setCi("");};
+  const removeCI=i=>setForm(f=>({...f,checklist:f.checklist.filter((_,idx)=>idx!==i)}));
+
+  const save=()=>{
+    if(!form.title||!form.assigneeId){alert("Fill: title and assignee");return;}
+    if(!roundMode&&!form.location){alert("Select a location");return;}
+
+    if(roundMode&&selectedRound&&!existing){
+      // Round mode — create ONE task per area, each with full checklist
+      const round=rounds.find(r=>r.id===selectedRound);
+      if(round&&round.areas.length>0){
+        const now=new Date().toISOString();
+        const tasksToCreate=round.areas.map((area,idx)=>({
+          id:uid(),
+          title:`${round.name} — ${area}`,
+          type:form.type,
+          priority:form.priority,
+          location:area,
+          assigneeId:form.assigneeId,
+          notes:`Round: ${round.name} | Position: ${round.position} | Focus: ${round.focus}`,
+          checklist:round.tasks.map(t=>({label:t,done:false})),
+          status:"pending",
+          photos:[],
+          createdAt:now,
+          roundId:round.id,
+          roundArea:idx+1,
+          roundTotal:round.areas.length,
+        }));
+        // Save ALL tasks at once — not one by one (which caused overwrites)
+        onSaveMultiple(tasksToCreate);
+        onClose();
+        return;
+      }
+    }
+
+    // Single task (no round, or editing)
+    onSave(existing?{...form}:{...form,id:uid(),status:"pending",photos:[],createdAt:new Date().toISOString(),roundId:selectedRound||null});
+    onClose();
+  };
+
+  // Filter rounds by assignee role
+  const relevantRounds=rounds.filter(r=>!form.assigneeId||r.dept===assigneeRole||assigneeRole==="management");
+
+  return(
+    <Modal title={existing?"Edit Task":"Create New Task"} onClose={onClose} wide={true}>
+      <div style={{display:"grid",gap:14}}>
+
+        {/* ── ROUND SELECTOR ── */}
+        {!existing&&(
+          <div style={{background:"#0a0a1a",border:"1px solid #d4a84333",borderRadius:12,padding:"14px 16px"}}>
+            <label style={{...L,color:"#d4a843",marginBottom:8}}>🔄 Load from Predefined Round</label>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <select style={{...I,flex:1}} value={selectedRound} onChange={e=>applyRound(e.target.value)}>
+                <option value="">— Select a round (optional) —</option>
+                {Object.entries(
+                  relevantRounds.reduce((acc,r)=>{
+                    if(!acc[r.dept])acc[r.dept]=[];
+                    acc[r.dept].push(r);
+                    return acc;
+                  },{})
+                ).map(([dept,deptRounds])=>(
+                  <optgroup key={dept} label={RL[dept]?.toUpperCase()||dept.toUpperCase()}>
+                    {deptRounds.map(r=><option key={r.id} value={r.id}>{r.name} — {r.position}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              {roundMode&&<button onClick={clearRound} style={{padding:"8px 12px",background:"transparent",border:"1px solid #ef444433",borderRadius:8,color:"#ef4444",cursor:"pointer",fontSize:11,whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif"}}>✕ Clear</button>}
+            </div>
+            {roundMode&&selectedRound&&(()=>{
+              const r=rounds.find(r=>r.id===selectedRound);
+              return r?(
+                <div style={{marginTop:10,padding:"10px 12px",background:"#d4a84312",border:"1px solid #d4a84333",borderRadius:8}}>
+                  <div style={{fontSize:11,color:"#d4a843",fontWeight:700,marginBottom:4}}>✓ Round loaded: {r.name}</div>
+                  <div style={{fontSize:10,color:"#888"}}>{r.areas.length} areas · {r.tasks.length} tasks · {r.focus}</div>
+                  <div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>
+                    {r.areas.map((a,i)=><span key={i} style={{fontSize:9,background:"#d4a84322",color:"#d4a843",border:"1px solid #d4a84333",borderRadius:4,padding:"1px 6px"}}>{a}</span>)}
+                  </div>
+                </div>
+              ):null;
+            })()}
+            {!roundMode&&<div style={{fontSize:10,color:"#555",marginTop:6}}>Or fill in manually below ↓</div>}
+          </div>
+        )}
+
+        <div><label style={L}>Title *</label><input style={I} value={form.title} onChange={e=>set("title",e.target.value)} placeholder="e.g. Round 1 — Cleaner 1"/></div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div><label style={L}>Type</label><select style={I} value={form.type} onChange={e=>set("type",e.target.value)}>
+            {["general","checklist","porter","repair","emergency","reception","inspection"].map(t=><option key={t} value={t}>{t.replace("_"," ")}</option>)}
+          </select></div>
+          <div><label style={L}>Priority</label><select style={I} value={form.priority} onChange={e=>set("priority",e.target.value)}>
+            {["urgent","high","medium","low"].map(p=><option key={p}>{p}</option>)}
+          </select></div>
+        </div>
+
+        {/* Assign To */}
+        <div><label style={L}>Assign To * <span style={{color:"#d4a843",fontWeight:400}}>(select first — location list adapts to role)</span></label>
+          <select style={I} value={form.assigneeId} onChange={e=>{set("assigneeId",e.target.value);if(!roundMode){set("location","");set("checklist",[]);}}}>
+            <option value="">Select staff member…</option>
+            {ROLES.map(role=><optgroup key={role} label={RL[role].toUpperCase()}>
+              {users.filter(u=>u.role===role).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+            </optgroup>)}
+          </select>
+        </div>
+
+        {/* Location — shows round areas if round mode, otherwise normal dropdown */}
+        {roundMode?(
+          <div>
+            <label style={L}>Areas covered by this round</label>
+            <div style={{background:"#0a0a1a",border:"1px solid #252540",borderRadius:10,padding:"10px 13px",display:"flex",flexWrap:"wrap",gap:6}}>
+              {(rounds.find(r=>r.id===selectedRound)?.areas||[]).map((a,i)=>(
+                <span key={i} style={{fontSize:11,background:"#d4a84322",color:"#d4a843",border:"1px solid #d4a84333",borderRadius:6,padding:"3px 10px"}}>{a}</span>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:"#555",marginTop:4}}>Staff will work through all areas listed above during this round</div>
+          </div>
+        ):(
+          <div>
+            <label style={L}>Location *
+              {assigneeRole&&<span style={{color:RC[assigneeRole]||"#666",marginLeft:6,fontWeight:400,textTransform:"none"}}>({RL[assigneeRole]} locations)</span>}
+            </label>
+            <select style={I} value={form.location} onChange={e=>handleLocationChange(e.target.value)}>
+              <option value="">Select location…</option>
+              {availableLocations.map(l=>{
+                const name=l.name||l;
+                return <option key={name} value={name}>{name}{l.tasks&&l.tasks.length>0?" ✓":""}</option>;
+              })}
+            </select>
+            {form.checklist.length>0&&form.location&&<div style={{fontSize:10,color:"#22c55e",marginTop:4}}>✓ {form.checklist.length} tasks auto-loaded</div>}
+          </div>
+        )}
+
+        <div><label style={L}>Notes</label><textarea style={{...I,height:60,resize:"none"}} value={form.notes||""} onChange={e=>set("notes",e.target.value)} placeholder="Any additional instructions…"/></div>
+
+        {/* Checklist */}
+        <div>
+          <label style={L}>Checklist Items {form.checklist.length>0&&<span style={{color:"#22c55e",fontWeight:400}}>({form.checklist.length} items{roundMode?" from round":""})</span>}</label>
+          {!roundMode&&<select style={{...I,marginBottom:8}} value={tmpl} onChange={e=>applyTmpl(e.target.value)}>
+            <option value="">Load template…</option>
+            {Object.keys(ALL_TEMPLATES).map(t=><option key={t} value={t}>{t}</option>)}
+          </select>}
+          {form.checklist.map((c,i)=>(
+            <div key={i} style={{display:"flex",gap:8,marginBottom:5}}>
+              <div style={{flex:1,background:"#0a0a1a",border:"1px solid #252540",borderRadius:8,padding:"7px 12px",color:"#ccc",fontSize:12}}>{c.label}</div>
+              <button onClick={()=>removeCI(i)} style={{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,flexShrink:0}}>✕</button>
+            </div>
+          ))}
+          <div style={{display:"flex",gap:8,marginTop:4}}>
+            <input style={{...I,flex:1}} value={ci} onChange={e=>setCi(e.target.value)} placeholder="Add checklist item…" onKeyDown={e=>e.key==="Enter"&&addCI()}/>
+            <button onClick={addCI} style={{padding:"10px 16px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:10,color:"#d4a843",cursor:"pointer",fontWeight:700,fontSize:14}}>+</button>
+          </div>
+        </div>
+
+        <button onClick={save} style={{padding:"14px",background:"#d4a843",border:"none",borderRadius:12,color:"#000",fontWeight:800,fontSize:15,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+          {existing?"Save Changes":"Create Task"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// CREATE PROFILE MODAL — Frantisek only
+// ═══════════════════════════════════════════════════════════
+function CreateProfileModal({onSave,onClose,existingProfiles}){
+  const [form,setForm]=useState({name:"",role:"cleaner",pin:""});
+  const [genPin,setGenPin]=useState("");
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const generatePin=()=>{const p=String(Math.floor(10000+Math.random()*90000));setGenPin(p);setForm(f=>({...f,pin:p}));};
+  const save=()=>{
+    if(!form.name.trim()||!form.pin||form.pin.length!==5){alert("Name required + 5-digit PIN");return;}
+    const id="ux_"+Date.now();
+    const nfc=`NFC-${form.role.slice(0,3).toUpperCase()}-${String(existingProfiles.length+100)}`;
+    onSave({id,name:form.name.trim(),role:form.role,pin:form.pin,nfc,custom:true});
+    onClose();
+  };
+  return(
+    <Modal title="Create New Staff Profile" onClose={onClose}>
+      <div style={{background:"#d4a84312",border:"1px solid #d4a84333",borderRadius:12,padding:"12px 16px",marginBottom:18,fontSize:12,color:"#d4a843"}}>
+        <strong>Frantisek Kabilka exclusive</strong> — New profiles appear in the mobile app immediately.
+      </div>
+      <div style={{display:"grid",gap:14}}>
+        <div><label style={L}>Full Name *</label><input style={I} value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. James Smith"/></div>
+        <div><label style={L}>Role</label><select style={I} value={form.role} onChange={e=>set("role",e.target.value)}>
+          {["management","reception","porter","cleaner"].map(r=><option key={r} value={r}>{RL[r]}</option>)}
+        </select></div>
+        <div>
+          <label style={L}>5-Digit PIN *</label>
+          <div style={{display:"flex",gap:8}}>
+            <input style={{...I,flex:1,fontFamily:"monospace",letterSpacing:4,fontSize:18}} value={form.pin} onChange={e=>set("pin",e.target.value.slice(0,5).replace(/\D/g,""))} placeholder="•••••" maxLength={5}/>
+            <button onClick={generatePin} style={{padding:"10px 14px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:10,color:"#d4a843",cursor:"pointer",fontSize:12,whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif"}}>Generate</button>
+          </div>
+          {genPin&&<div style={{marginTop:6,fontSize:11,color:"#555"}}>Generated PIN: <span style={{color:"#d4a843",fontFamily:"monospace",fontWeight:800,letterSpacing:2}}>{genPin}</span> — note this down!</div>}
+        </div>
+        <button onClick={save} style={{padding:"14px",background:"#d4a843",border:"none",borderRadius:12,color:"#000",fontWeight:800,fontSize:15,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Create Profile</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// PIN RESET MODAL — Frantisek only
+// ═══════════════════════════════════════════════════════════
+function PinResetModal({users,pins,onSave,onClose}){
+  const [selected,setSelected]=useState("");
+  const [newPin,setNewPin]=useState("");
+  const [genPin,setGenPin]=useState("");
+  const generatePin=()=>{const p=String(Math.floor(10000+Math.random()*90000));setGenPin(p);setNewPin(p);};
+  const save=()=>{
+    if(!selected||!newPin||newPin.length!==5){alert("Select user and enter 5-digit PIN");return;}
+    onSave(selected,newPin);
+    onClose();
+  };
+  const currentPin=(uid)=>pins[uid]||users.find(u=>u.id===uid)?.pin||"—";
+  return(
+    <Modal title="Reset Staff PIN" onClose={onClose}>
+      <div style={{background:"#ef444412",border:"1px solid #ef444433",borderRadius:12,padding:"12px 16px",marginBottom:18,fontSize:12,color:"#ef4444"}}>
+        <strong>Frantisek Kabilka exclusive</strong> — Reset any staff member's PIN.
+      </div>
+      <div style={{display:"grid",gap:14}}>
+        <div><label style={L}>Select Staff Member</label>
+          <select style={I} value={selected} onChange={e=>{setSelected(e.target.value);setNewPin("");setGenPin("");}}>
+            <option value="">Select…</option>
+            {ROLES.map(role=><optgroup key={role} label={RL[role].toUpperCase()}>
+              {users.filter(u=>u.role===role).map(u=><option key={u.id} value={u.id}>{u.name} (current: {currentPin(u.id)})</option>)}
+            </optgroup>)}
+          </select>
+        </div>
+        {selected&&<div>
+          <label style={L}>New 5-Digit PIN *</label>
+          <div style={{display:"flex",gap:8}}>
+            <input style={{...I,flex:1,fontFamily:"monospace",letterSpacing:4,fontSize:18}} value={newPin} onChange={e=>setNewPin(e.target.value.slice(0,5).replace(/\D/g,""))} placeholder="•••••" maxLength={5}/>
+            <button onClick={generatePin} style={{padding:"10px 14px",background:"#ef444422",border:"1px solid #ef444444",borderRadius:10,color:"#ef4444",cursor:"pointer",fontSize:12,whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif"}}>Generate</button>
+          </div>
+          {genPin&&<div style={{marginTop:6,fontSize:11,color:"#555"}}>Generated PIN: <span style={{color:"#ef4444",fontFamily:"monospace",fontWeight:800,letterSpacing:2}}>{genPin}</span> — note this down!</div>}
+        </div>}
+        <button onClick={save} disabled={!selected||newPin.length!==5} style={{padding:"14px",background:selected&&newPin.length===5?"#ef4444":"#333",border:"none",borderRadius:12,color:selected&&newPin.length===5?"#fff":"#666",fontWeight:800,fontSize:15,cursor:selected&&newPin.length===5?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif"}}>
+          Reset PIN
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// DAILY REPORT — PDF export
+// ═══════════════════════════════════════════════════════════
+function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
+  const [date,setDate]=useState(tod());
+  const [selLocs,setSelLocs]=useState([]);
+  const [includePhotos,setIncludePhotos]=useState(true);
+  const [generating,setGenerating]=useState(false);
+  const getUser=id=>[...BASE_USERS,...users].find(u=>u.id===id);
+  // Match tasks by createdAt, updatedAt, or dueDate — all fall back to today
+  const dayTasks=tasks.filter(t=>{
+    const created=(t.createdAt||"").slice(0,10);
+    const updated=(t.updatedAt||"").slice(0,10);
+    const due=(t.dueDate||"").slice(0,10);
+    return created===date||updated===date||due===date;
+  });
+  const dayCheckouts=checkouts.filter(c=>(c.date||"").slice(0,10)===date);
+  const dayRepairs=repairs.filter(r=>(r.date||"").slice(0,10)===date);
+  const dayInspections=inspections.filter(i=>(i.date||"").slice(0,10)===date);
+  // Show all tasks for the day, plus any location that had a checkout photo
+  const cleanedLocs=[...new Set([
+    ...dayCheckouts.map(c=>c.location).filter(Boolean),
+    ...dayTasks.map(t=>t.location).filter(Boolean),
+  ])];
+  const filteredLocs=selLocs.length>0?cleanedLocs.filter(l=>selLocs.includes(l)):cleanedLocs;
+  const toggleLoc=l=>setSelLocs(s=>s.includes(l)?s.filter(x=>x!==l):[...s,l]);
+
+  const buildLocationsHtml=(locs)=>{
+    if(!locs.length)return '<div class="section"><div class="section-title">Locations Cleaned</div><div style="color:#aaa;font-size:13px;padding:12px">No cleaning recorded for this date.</div></div>';
+    let html='<div class="section"><div class="section-title">Locations Cleaned</div>';
+    locs.forEach(loc=>{
+      const locTasks=dayTasks.filter(t=>t.location===loc);
+      const locCheckouts=dayCheckouts.filter(c=>c.location===loc);
+      html+='<div class="loc-block"><div class="loc-name">&#128205; '+loc+'</div>';
+      locTasks.forEach(t=>{
+        const u=getUser(t.assigneeId);
+        const cls=t.status==="done"?"check":"pending-dot";
+        const sym=t.status==="done"?"&#10003;":"!";
+        html+='<div class="task-row"><span class="'+cls+'">'+sym+'</span><span style="flex:1;margin-left:10px">'+(t.title||"")+'</span>';
+        if(u)html+='<span class="staff-tag">'+u.name.split(" ")[0]+'</span>';
+        html+='</div>';
+      });
+      if(includePhotos&&locCheckouts.length>0){
+        html+='<div style="margin-top:12px"><div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Checkout Photos</div>';
+        locCheckouts.forEach(c=>{
+          html+='<div style="margin-bottom:8px">';
+          if(c.photo)html+='<img src="'+c.photo+'" class="checkout-photo" alt="checkout"/>';
+          html+='<div style="font-size:11px;color:#888;margin-top:4px">'+(c.userName||"")+' &middot; '+(c.time||"");
+          if(c.note)html+=' &middot; '+c.note;
+          html+='</div></div>';
+        });
+        html+='</div>';
+      }
+      html+='</div>';
+    });
+    html+='</div>';
+    return html;
+  };
+
+  const buildRepairsHtml=()=>{
+    if(!dayRepairs.length)return "";
+    let html='<div class="section"><div class="section-title">Repairs Reported</div>';
+    dayRepairs.forEach(r=>{
+      const u=getUser(r.reportedBy);
+      const uc=PC[r.urgency]||"#6b7280";
+      html+='<div class="repair-row"><strong>&#128295; '+(r.title||"")+"</strong> &mdash; "+(r.location||"");
+      html+=' <span class="badge" style="background:'+uc+'22;color:'+uc+';border:1px solid '+uc+'44;margin-left:8px">'+(r.urgency||"")+"</span>";
+      html+='<div style="font-size:11px;color:#888;margin-top:3px">Reported by '+((u&&u.name)||"Unknown");
+      if(r.description)html+=" &middot; "+r.description;
+      html+="</div></div>";
+    });
+    html+="</div>";return html;
+  };
+
+  const buildInspectionsHtml=()=>{
+    if(!dayInspections.length)return "";
+    let html='<div class="section"><div class="section-title">Inspection Scores</div>';
+    dayInspections.forEach(ins=>{
+      const sc=ins.score>=90?"#22c55e":ins.score>=70?"#f59e0b":"#ef4444";
+      html+='<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #ece8d9">';
+      html+='<div style="font-size:24px;font-weight:900;color:'+sc+';min-width:48px">'+ins.score+"</div>";
+      const areaStr=(ins.areas||[]).filter(a=>a.rating!==null).map(a=>a.area+": "+a.rating+"/5").join(" &middot; ");
+      html+='<div><div style="font-weight:700">'+ins.location+'</div><div style="font-size:11px;color:#888">'+areaStr+"</div></div></div>";
+    });
+    html+="</div>";return html;
+  };
+
+  const generatePdf=()=>{
+    setGenerating(true);
+    setTimeout(()=>{
+      const w=window.open("","_blank");
+      if(!w){setGenerating(false);alert("Please allow popups");return;}
+      const dateLabel=new Date(date).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+      const css=['*{margin:0;padding:0;box-sizing:border-box;}','body{font-family:Helvetica Neue,Arial,sans-serif;color:#111;background:#fff;padding:40px;}','.header{border-bottom:3px solid #c9a227;padding-bottom:20px;margin-bottom:30px;display:flex;justify-content:space-between;align-items:flex-start;}','.logo{font-size:28px;font-weight:900;letter-spacing:-1px;}','.logo span{color:#c9a227;}','.date-badge{background:#c9a227;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;}','.section{margin-bottom:28px;}','.section-title{font-size:15px;font-weight:800;color:#c9a227;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #e8d99a;}','.loc-block{background:#f9f7f0;border:1px solid #e8d99a;border-radius:10px;padding:16px 20px;margin-bottom:12px;}','.loc-name{font-size:16px;font-weight:800;color:#111;margin-bottom:10px;}','.task-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #ece8d9;font-size:13px;}','.task-row:last-child{border-bottom:none;}','.check{width:16px;height:16px;border-radius:4px;background:#22c55e;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}','.pending-dot{width:16px;height:16px;border-radius:4px;background:#f97316;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}','.staff-tag{background:#111;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:auto;}','.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}','.stat{background:#f9f7f0;border:1px solid #e8d99a;border-radius:10px;padding:14px;text-align:center;}','.stat-val{font-size:32px;font-weight:900;color:#c9a227;}','.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-top:4px;}','.checkout-photo{max-width:280px;border-radius:10px;margin-top:10px;border:2px solid #e8d99a;display:block;}','.repair-row{padding:8px 0;border-bottom:1px solid #ece8d9;font-size:13px;}','.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;}','.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e8d99a;display:flex;justify-content:space-between;font-size:10px;color:#aaa;}','@media print{body{padding:20px;}@page{margin:10mm;}}'].join("");
+      let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SFH Daily Report</title><style>'+css+"</style></head><body>";
+      html+='<div class="header"><div><div class="logo">Soho <span>House</span></div><div style="font-size:13px;color:#888;margin-top:4px">Operations Daily Report</div></div>';
+      html+='<div><div class="date-badge">'+dateLabel+"</div><div style=\"font-size:11px;color:#aaa;text-align:right;margin-top:6px\">Generated "+new Date().toLocaleString("en-GB")+"</div></div></div>";
+      html+='<div class="stats"><div class="stat"><div class="stat-val">'+filteredLocs.length+'</div><div class="stat-label">Locations Cleaned</div></div><div class="stat"><div class="stat-val">'+dayTasks.filter(t=>t.status==="done").length+'</div><div class="stat-label">Tasks Completed</div></div><div class="stat"><div class="stat-val">'+dayCheckouts.length+'</div><div class="stat-label">Checkout Photos</div></div><div class="stat"><div class="stat-val">'+dayRepairs.length+"</div><div class=\"stat-label\">Repairs Reported</div></div></div>";
+      html+=buildLocationsHtml(filteredLocs);
+      html+=buildRepairsHtml();
+      html+=buildInspectionsHtml();
+      html+='<div class="footer"><span>Soho House Operations Platform</span><span>Confidential &mdash; Management use only</span></div></body></html>';
+      w.document.write(html);w.document.close();
+      setTimeout(()=>{w.print();setGenerating(false);},500);
+    },100);
+  };
+
+  return(
+    <div>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:4}}>Daily Report</div>
+      <div style={{fontSize:13,color:"#555",marginBottom:20}}>Generate a PDF report of cleaning activity for any date</div>
+      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:16,padding:"20px",marginBottom:20}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <div><label style={L}>Report Date</label><input type="date" style={I} value={date} onChange={e=>setDate(e.target.value)}/></div>
+          <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+            <label style={L}>Options</label>
+            <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+              <input type="checkbox" checked={includePhotos} onChange={e=>setIncludePhotos(e.target.checked)} style={{width:16,height:16,accentColor:"#d4a843"}}/>
+              <span style={{fontSize:13,color:"#aaa"}}>Include checkout photos in PDF</span>
+            </label>
+          </div>
+        </div>
+        {cleanedLocs.length>0&&<div>
+          <label style={{...L,marginBottom:8}}>Filter Locations (leave empty for all)</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {cleanedLocs.map(l=>(
+              <button key={l} onClick={()=>toggleLoc(l)} style={{padding:"5px 12px",borderRadius:20,background:selLocs.includes(l)?"#d4a84322":"transparent",border:`1px solid ${selLocs.includes(l)?"#d4a843":"#252540"}`,color:selLocs.includes(l)?"#d4a843":"#555",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{l}</button>
+            ))}
+          </div>
+        </div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
+        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length,c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
+          <div key={s.l} style={{background:"#111128",border:`1px solid ${s.c}22`,borderRadius:14,padding:"16px",textAlign:"center"}}>
+            <div style={{fontSize:30,fontWeight:900,color:s.c,fontFamily:"Georgia,serif"}}>{s.v}</div>
+            <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginTop:4}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+      {filteredLocs.length>0?(
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"20px",marginBottom:20}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:14}}>Locations to include</div>
+          {filteredLocs.map(loc=>{
+            const locTasks=dayTasks.filter(t=>t.location===loc);
+            const locCheckouts=dayCheckouts.filter(c=>c.location===loc);
+            const done=locTasks.filter(t=>t.status==="done").length;
+            return(
+              <div key={loc} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #1e1e38"}}>
+                <div style={{fontSize:16}}>📍</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,color:"#fff",fontWeight:600}}>{loc}</div>
+                  <div style={{fontSize:11,color:"#555",marginTop:2}}>{done}/{locTasks.length} tasks done · {locCheckouts.length} photos</div>
+                </div>
+                {locCheckouts.length>0&&includePhotos&&<div style={{display:"flex",gap:4}}>
+                  {locCheckouts.slice(0,2).map((c,i)=>c.photo&&<img key={i} src={c.photo} alt="" style={{width:36,height:36,borderRadius:6,objectFit:"cover",border:"1px solid #333"}}/>)}
+                </div>}
+              </div>
+            );
+          })}
+        </div>
+      ):(
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"32px",textAlign:"center",marginBottom:20,color:"#555"}}>
+          No cleaning activity recorded for {new Date(date).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}.
+        </div>
+      )}
+      <button onClick={generatePdf} disabled={generating} style={{width:"100%",padding:"16px",background:generating?"#333":"#d4a843",border:"none",borderRadius:14,color:generating?"#666":"#000",fontWeight:800,fontSize:16,cursor:generating?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+        {generating?"⏳ Generating PDF…":"📄 Export PDF Report"}
+      </button>
+      <div style={{fontSize:11,color:"#444",textAlign:"center",marginTop:8}}>Opens print dialog — Save as PDF or print directly</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════════════════════
+function Overview({tasks,repairs,orders,inspections,liveLocations,allUsers,onNav}){
+  const tot=tasks.length,pend=tasks.filter(t=>t.status==="pending").length;
+  const inp=tasks.filter(t=>t.status==="in_progress").length,done=tasks.filter(t=>t.status==="done").length;
+  const urg=tasks.filter(t=>t.priority==="urgent"&&t.status!=="done").length;
+  const openRep=repairs.filter(r=>r.status==="open").length,pendOrd=orders.filter(o=>o.status==="pending").length;
+  const byRole=ROLES.map(role=>{const ru=allUsers.filter(u=>u.role===role);const ids=ru.map(u=>u.id);const rt=tasks.filter(t=>ids.includes(t.assigneeId));return{role,count:rt.length,done:rt.filter(t=>t.status==="done").length,color:RC[role]};});
+  const recent=[...tasks].filter(t=>t.createdAt).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,6);
+  const activeCount=Object.keys(liveLocations).length;
+  return(
+    <div>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Dashboard Overview</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:24}}>
+        {[
+          {l:"Total Tasks",   v:tot,        c:"#d4a843", tab:"tasks",          filter:{status:"all"}},
+          {l:"Pending",       v:pend,       c:"#f97316", tab:"tasks",          filter:{status:"pending"}},
+          {l:"In Progress",   v:inp,        c:"#3b82f6", tab:"tasks",          filter:{status:"in_progress"}},
+          {l:"Completed",     v:done,       c:"#22c55e", tab:"tasks",          filter:{status:"done"}},
+          {l:"Active Staff",  v:activeCount,c:"#a78bfa", tab:"locations_live", filter:null},
+        ].map(s=>(
+          <div key={s.l} onClick={()=>onNav(s.tab,s.filter)} style={{background:"#111128",border:`1px solid ${s.c}22`,borderRadius:16,padding:"18px 12px",textAlign:"center",cursor:"pointer",transition:"all .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=`${s.c}12`;e.currentTarget.style.borderColor=`${s.c}55`;}}
+            onMouseLeave={e=>{e.currentTarget.style.background="#111128";e.currentTarget.style.borderColor=`${s.c}22`;}}>
+            <div style={{fontSize:34,fontWeight:900,color:s.c,fontFamily:"Georgia,serif"}}>{s.v}</div>
+            <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginTop:4}}>{s.l}</div>
+            <div style={{fontSize:9,color:s.c,opacity:.6,marginTop:3}}>click to view →</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
+        {urg>0&&<div onClick={()=>onNav("tasks",{priority:"urgent"})} style={{background:"#ef444412",border:"1px solid #ef444444",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flex:1,minWidth:180,cursor:"pointer"}}><span style={{fontSize:22}}>⚡</span><div><div style={{color:"#ef4444",fontWeight:800,fontSize:14}}>{urg} Urgent Tasks</div><div style={{color:"#ef444488",fontSize:11}}>Click to view →</div></div></div>}
+        {openRep>0&&<div onClick={()=>onNav("repairs")} style={{background:"#f9731612",border:"1px solid #f9731644",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flex:1,minWidth:180,cursor:"pointer"}}><span style={{fontSize:22}}>🔧</span><div><div style={{color:"#f97316",fontWeight:800,fontSize:14}}>{openRep} Open Repairs</div><div style={{color:"#f9731488",fontSize:11}}>Click to view →</div></div></div>}
+        {pendOrd>0&&<div onClick={()=>onNav("orders")} style={{background:"#38bdf812",border:"1px solid #38bdf844",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flex:1,minWidth:180,cursor:"pointer"}}><span style={{fontSize:22}}>🛒</span><div><div style={{color:"#38bdf8",fontWeight:800,fontSize:14}}>{pendOrd} Supply Orders</div><div style={{color:"#38bdf888",fontSize:11}}>Click to view →</div></div></div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"20px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>Tasks by Team</div>
+            <button onClick={()=>onNav("tasks")} style={{fontSize:10,color:"#d4a843",background:"transparent",border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>View all →</button>
+          </div>
+          {byRole.map(r=>(
+            <div key={r.role} onClick={()=>onNav("tasks",{role:r.role})} style={{marginBottom:14,cursor:"pointer",padding:"4px 0"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:r.color,textTransform:"capitalize"}}>{RL[r.role]}</span><span style={{fontSize:11,color:"#555"}}>{r.done}/{r.count}</span></div>
+              <div style={{height:5,background:"#1e1e38",borderRadius:5,overflow:"hidden"}}><div style={{height:"100%",width:r.count?`${r.done/r.count*100}%`:"0",background:r.color,borderRadius:5}}/></div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"20px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>Recent Tasks</div>
+            <button onClick={()=>onNav("tasks")} style={{fontSize:10,color:"#d4a843",background:"transparent",border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>View all →</button>
+          </div>
+          {recent.map(t=>(
+            <div key={t.id} onClick={()=>onNav("tasks")} style={{marginBottom:10,paddingBottom:10,borderBottom:"1px solid #1e1e38",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+              <div style={{fontSize:12,color:"#ddd",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.title}</div>
+              <div style={{fontSize:10,color:"#555",marginTop:2}}>{t.location} · <span style={{color:SC[t.status]||"#666"}}>{t.status}</span></div>
+            </div>
+          ))}
+          {!recent.length&&<div style={{color:"#555",fontSize:13}}>No tasks yet.</div>}
+        </div>
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"20px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>Recent Inspections</div>
+            <button onClick={()=>onNav("inspections")} style={{fontSize:10,color:"#d4a843",background:"transparent",border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>View all →</button>
+          </div>
+          {inspections.slice(0,5).map(ins=>{const sc=ins.score>=90?"#22c55e":ins.score>=70?"#eab308":"#ef4444";return(
+            <div key={ins.id} onClick={()=>onNav("inspections")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+              <div style={{fontSize:22,fontWeight:900,color:sc,minWidth:40,fontFamily:"Georgia,serif"}}>{ins.score}</div>
+              <div><div style={{fontSize:12,color:"#ddd"}}>{ins.location}</div><div style={{fontSize:10,color:"#555"}}>{dfShort(ins.date)}</div></div>
+            </div>
+          );})}
+          {!inspections.length&&<div style={{color:"#555",fontSize:13}}>No inspections yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// TASK DETAIL DRAWER — slide-in from right, live progress
+// ═══════════════════════════════════════════════════════════
+function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
+  const u=allUsers.find(x=>x.id===task.assigneeId);
+  const rc=RC[u?.role]||"#666";
+  const pc=PC[task.priority]||"#6b7280";
+  const sc=SC[task.status]||"#6b7280";
+  const done=task.checklist?.filter(c=>c.done).length||0;
+  const total=task.checklist?.length||0;
+  const prog=total?Math.round(done/total*100):null;
+  const typeEm={general:"📋",checklist:"✓",porter:"🚗",repair:"🔧",emergency:"⚡",reception:"📞",inspection:"⭐"};
+  // Inspection state — per-item OK / Issue flags + comment
+  const [inspState,setInspState]=useState({}); // {itemIdx: "ok"|"issue"}
+  const [inspComment,setInspComment]=useState("");
+  const [showInspComment,setShowInspComment]=useState(false);
+  const hasIssues=Object.values(inspState).some(v=>v==="issue");
+  const allInspected=total>0&&Object.keys(inspState).length===total;
+  const setItemInsp=(i,val)=>setInspState(s=>({...s,[i]:val}));
+
+  return(
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"#00000060",zIndex:500,backdropFilter:"blur(4px)"}}/>
+      {/* Drawer */}
+      <div style={{position:"fixed",top:0,right:0,bottom:0,width:480,background:"#0d0d1e",borderLeft:"1px solid #252540",zIndex:501,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        {/* Header */}
+        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #1e1e38",background:"#09091a",position:"sticky",top:0,zIndex:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+            <div style={{flex:1,marginRight:12}}>
+              <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1.5,marginBottom:4}}>{typeEm[task.type]||"📋"} {task.type}</div>
+              <div style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",lineHeight:1.3}}>{task.title}</div>
+            </div>
+            <button onClick={onClose} style={{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>✕</button>
+          </div>
+          {/* Status + Priority row */}
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <Badge label={task.priority} color={pc} sm/>
+            <select value={task.status} onChange={e=>onUpdate({...task,status:e.target.value,updatedAt:new Date().toISOString()})}
+              style={{background:`${sc}15`,border:`1px solid ${sc}55`,borderRadius:8,padding:"3px 10px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif",fontWeight:700}}>
+              {["pending","in_progress","done"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
+            </select>
+            {task.roundId&&<span style={{fontSize:9,color:"#a78bfa",background:"#a78bfa18",border:"1px solid #a78bfa33",borderRadius:6,padding:"2px 8px"}}>🔄 Area {task.roundArea}/{task.roundTotal}</span>}
+          </div>
+        </div>
+
+        <div style={{padding:"20px 24px",flex:1}}>
+          {/* Assignee + Location */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+            <div style={{background:"#111128",borderRadius:12,padding:"12px 14px"}}>
+              <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Assigned To</div>
+              {u?(
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <Av name={u.name} size={28} color={rc}/>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{u.name}</div>
+                    <Badge label={RL[u.role]} color={rc} sm/>
+                  </div>
+                </div>
+              ):<div style={{color:"#555",fontSize:12}}>Unassigned</div>}
+            </div>
+            <div style={{background:"#111128",borderRadius:12,padding:"12px 14px"}}>
+              <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Location</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>📍 {task.location||"—"}</div>
+              {task.dueDate&&<div style={{fontSize:10,color:"#555",marginTop:4}}>Due: {df(task.dueDate)}</div>}
+            </div>
+          </div>
+
+          {/* Progress */}
+          {total>0&&(
+            <div style={{background:"#111128",borderRadius:12,padding:"16px",marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>Checklist Progress</div>
+                <div style={{fontSize:13,fontWeight:900,color:prog===100?"#22c55e":"#d4a843"}}>{prog}%</div>
+              </div>
+              {/* Big progress bar */}
+              <div style={{height:8,background:"#1e1e38",borderRadius:8,overflow:"hidden",marginBottom:14}}>
+                <div style={{height:"100%",width:`${prog}%`,background:prog===100?"#22c55e":"#d4a843",borderRadius:8,transition:"width .4s"}}/>
+              </div>
+              <div style={{fontSize:11,color:"#555",marginBottom:12}}>{done} of {total} tasks completed</div>
+              {/* Checklist items with inspection toggle */}
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {task.checklist.map((c,i)=>{
+                  const istate=inspState[i];
+                  return(
+                    <div key={i} style={{borderRadius:8,border:`1px solid ${istate==="issue"?"#ef444444":istate==="ok"?"#22c55e44":"#1e1e38"}`,overflow:"hidden"}}>
+                      {/* Task row */}
+                      <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:istate==="issue"?"#ef444410":istate==="ok"?"#22c55e10":c.done?"#22c55e12":"#0a0a1a"}}>
+                        <div style={{width:18,height:18,borderRadius:5,flexShrink:0,background:c.done?"#22c55e":"transparent",border:`2px solid ${c.done?"#22c55e":"#333"}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          {c.done&&<span style={{fontSize:10,color:"#000",fontWeight:900}}>✓</span>}
+                        </div>
+                        <span style={{fontSize:12,color:c.done?"#22c55e":"#ccc",flex:1}}>{c.label}</span>
+                        {/* Inspection buttons */}
+                        <div style={{display:"flex",gap:4,flexShrink:0}}>
+                          <button onClick={()=>setItemInsp(i,istate==="ok"?undefined:"ok")}
+                            style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${istate==="ok"?"#22c55e":"#333"}`,background:istate==="ok"?"#22c55e22":"transparent",color:istate==="ok"?"#22c55e":"#555",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                            ✓ OK
+                          </button>
+                          <button onClick={()=>setItemInsp(i,istate==="issue"?undefined:"issue")}
+                            style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${istate==="issue"?"#ef4444":"#333"}`,background:istate==="issue"?"#ef444422":"transparent",color:istate==="issue"?"#ef4444":"#555",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                            ✕ Issue
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Inspection summary */}
+              {Object.keys(inspState).length>0&&(
+                <div style={{marginTop:10,padding:"10px 12px",background:hasIssues?"#ef444412":"#22c55e12",border:`1px solid ${hasIssues?"#ef444433":"#22c55e33"}`,borderRadius:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:hasIssues?"#ef4444":"#22c55e",marginBottom:4}}>
+                    {hasIssues
+                      ?`⚠️ ${Object.values(inspState).filter(v=>v==="issue").length} issue(s) found`
+                      :"✓ All items inspected — no issues"}
+                  </div>
+                  {hasIssues&&<div style={{fontSize:10,color:"#888"}}>Add a comment below and send back to staff</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Notes */}
+          {task.notes&&(
+            <div style={{background:"#111128",borderRadius:12,padding:"14px",marginBottom:16}}>
+              <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Notes</div>
+              <div style={{fontSize:12,color:"#aaa",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{task.notes}</div>
+            </div>
+          )}
+
+          {/* Photos */}
+          {task.photos&&task.photos.length>0&&(
+            <div style={{background:"#111128",borderRadius:12,padding:"14px",marginBottom:16}}>
+              <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>
+                Photo Evidence ({task.photos.length})
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+                {task.photos.map((ph,i)=>(
+                  <div key={i} style={{borderRadius:8,overflow:"hidden",position:"relative",aspectRatio:"1"}}>
+                    {ph.dataUrl
+                      ?<img src={ph.dataUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      :<div style={{width:"100%",height:"100%",background:"#0a0a1a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📷</div>
+                    }
+                    {ph.time&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"#000000aa",fontSize:8,color:"#fff",padding:"2px 4px",textAlign:"center"}}>{ph.time}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Created info */}
+          <div style={{fontSize:10,color:"#333",marginBottom:20}}>
+            Created: {task.createdAt?new Date(task.createdAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
+            {task.updatedAt&&<span> · Updated: {new Date(task.updatedAt).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>}
+          </div>
+
+          {/* Send back for correction — only when issues found */}
+          {hasIssues&&(
+            <div style={{marginBottom:12}}>
+              {!showInspComment?(
+                <button onClick={()=>setShowInspComment(true)}
+                  style={{width:"100%",padding:"11px",background:"#f9731622",border:"1px solid #f9731644",borderRadius:10,color:"#f97316",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  📋 Add Comment & Send Back for Correction
+                </button>
+              ):(
+                <div style={{background:"#0a0a1a",border:"1px solid #f9731633",borderRadius:12,padding:"14px"}}>
+                  <div style={{fontSize:11,color:"#f97316",fontWeight:700,marginBottom:8}}>
+                    Issues found in: {Object.entries(inspState).filter(([,v])=>v==="issue").map(([i])=>task.checklist[i]?.label).filter(Boolean).join(", ")}
+                  </div>
+                  <textarea
+                    value={inspComment}
+                    onChange={e=>setInspComment(e.target.value)}
+                    placeholder="Describe what needs to be corrected… (e.g. mirrors not cleaned, bin not emptied)"
+                    style={{width:"100%",boxSizing:"border-box",background:"#111128",border:"1px solid #252540",borderRadius:8,padding:"10px 12px",color:"#fff",fontSize:12,resize:"none",fontFamily:"'DM Sans',sans-serif",outline:"none",height:80,marginBottom:10}}
+                  />
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>setShowInspComment(false)}
+                      style={{flex:1,padding:"9px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                      Cancel
+                    </button>
+                    <button
+                      onClick={()=>{
+                        const issueLabels=Object.entries(inspState).filter(([,v])=>v==="issue").map(([i])=>task.checklist[i]?.label).filter(Boolean);
+                        onSendBack({
+                          ...task,
+                          status:"pending",
+                          inspectionNote:"⚠️ Issues found by management:\n"+issueLabels.map(l=>"• "+l).join("\n")+(inspComment?"\n\nComment: "+inspComment:""),
+                          updatedAt:new Date().toISOString(),
+                        });
+                        onClose();
+                      }}
+                      style={{flex:2,padding:"9px",background:"#f97316",border:"none",borderRadius:8,color:"#000",fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                      🔄 Send Back to {u?.name?.split(" ")[0]||"Staff"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{onUpdate({...task,status:"done",updatedAt:new Date().toISOString()});onClose();}} disabled={task.status==="done"}
+              style={{flex:2,padding:"11px",background:task.status==="done"?"#1e1e38":"#22c55e22",border:`1px solid ${task.status==="done"?"#252540":"#22c55e55"}`,borderRadius:10,color:task.status==="done"?"#333":"#22c55e",fontWeight:700,fontSize:12,cursor:task.status==="done"?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+              {task.status==="done"?"✓ Completed":"Mark as Done"}
+            </button>
+            <button onClick={()=>onDelete(task.id)} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #ef444433",borderRadius:10,color:"#ef4444",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// TASKS PANEL
+// ═══════════════════════════════════════════════════════════
+function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMultiple,onUpdate,onDelete,onDeleteCheckout}){
+  const [filter,setFilter]=useState({status:"all",role:"all",priority:"all",search:""});
+  const [editing,setEditing]=useState(null);
+  const [showCreate,setShowCreate]=useState(false);
+  const [viewPhoto,setViewPhoto]=useState(null); // lightbox
+  const [viewTask,setViewTask]=useState(null);   // task detail drawer
+  const getUser=id=>allUsers.find(u=>u.id===id);
+  const filt=tasks.filter(t=>{
+    if(filter.status!=="all"&&t.status!==filter.status)return false;
+    if(filter.priority!=="all"&&t.priority!==filter.priority)return false;
+    if(filter.role!=="all"&&getUser(t.assigneeId)?.role!==filter.role)return false;
+    if(filter.search&&!t.title.toLowerCase().includes(filter.search.toLowerCase()))return false;
+    return true;
+  });
+  const sel={background:"#0d0d1e",border:"1px solid #252540",borderRadius:8,padding:"7px 12px",color:"#aaa",fontSize:12,outline:"none",fontFamily:"'DM Sans',sans-serif"};
+  const typeEm={general:"📋",checklist:"✓",porter:"🚗",repair:"🔧",emergency:"⚡",reception:"📞",inspection:"⭐"};
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Tasks ({filt.length})</div>
+        <button onClick={()=>setShowCreate(true)} style={{padding:"10px 20px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>+ New Task</button>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+        <input value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))} placeholder="Search…" style={{...sel,flex:1,minWidth:140}}/>
+        {[["status",["all","pending","in_progress","done"]],["priority",["all","urgent","high","medium","low"]],["role",["all",...ROLES]]].map(([k,opts])=>(
+          <select key={k} style={sel} value={filter[k]} onChange={e=>setFilter(f=>({...f,[k]:e.target.value}))}>
+            {opts.map(o=><option key={o} value={o}>{o==="all"?`All ${k.charAt(0).toUpperCase()+k.slice(1)}`:o.replace("_"," ")}</option>)}
+          </select>
+        ))}
+        <button onClick={()=>setFilter({status:"all",role:"all",priority:"all",search:""})} style={{...sel,cursor:"pointer",color:"#d4a843",borderColor:"#d4a84344",background:"transparent"}}>Reset</button>
+      </div>
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 0.8fr 1fr 0.7fr 110px",borderBottom:"1px solid #1e1e38",padding:"10px 16px"}}>
+          {["Task","Location","Assigned To","Priority","Status","Due",""].map(h=>(
+            <div key={h} style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{h}</div>
+          ))}
+        </div>
+        <div style={{padding:"6px 16px",borderBottom:"1px solid #0a0a1a",background:"#0a0a1a"}}>
+          <span style={{fontSize:9,color:"#333"}}>👆 Click any row to see live task progress</span>
+        </div>
+        {filt.length===0?<div style={{padding:"40px",textAlign:"center",color:"#555"}}>No tasks match filters</div>
+        :filt.map(t=>{
+          const pc=PC[t.priority]||"#6b7280",sc=SC[t.status]||"#6b7280";
+          const u=getUser(t.assigneeId),rc=RC[u?.role]||"#666";
+          const prog=t.checklist?.length?Math.round(t.checklist.filter(c=>c.done).length/t.checklist.length*100):null;
+          return(
+            <div key={t.id} onClick={()=>setViewTask(t)} style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 0.8fr 1fr 0.7fr 110px",padding:"11px 16px",borderBottom:"1px solid #0a0a1a",alignItems:"center",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div>
+                <div style={{color:"#fff",fontSize:13,fontWeight:600}}>{typeEm[t.type]||"📋"} {t.title}</div>
+                {t.roundId&&<div style={{fontSize:9,color:"#a78bfa",marginTop:1}}>🔄 Round · Area {t.roundArea}/{t.roundTotal}</div>}
+                {prog!==null&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                  <div style={{width:60,height:3,background:"#1e1e38",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${prog}%`,background:"#d4a843",borderRadius:3}}/></div>
+                  <span style={{fontSize:9,color:"#555"}}>{prog}%</span>
+                </div>}
+              </div>
+              <div style={{color:"#888",fontSize:12}}>{t.location||"—"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>{u?<><Av name={u.name} size={22} color={rc}/><span style={{color:"#aaa",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name.split(" ")[0]}</span></>:<span style={{color:"#555",fontSize:11}}>—</span>}</div>
+              <div><Badge label={t.priority||"—"} color={pc} sm/></div>
+              <div onClick={e=>e.stopPropagation()}>
+                <select value={t.status} onChange={e=>onUpdate({...t,status:e.target.value,updatedAt:new Date().toISOString()})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"3px 8px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif"}}>
+                  {["pending","in_progress","done"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
+                </select>
+              </div>
+              <div style={{color:"#555",fontSize:11}}>{dfShort(t.dueDate)}</div>
+              <div style={{display:"flex",gap:5,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                {t.photos&&t.photos.length>0&&(
+                  <div style={{display:"flex",gap:2,marginRight:4}}>
+                    {t.photos.slice(0,2).map((ph,pi)=>ph.dataUrl
+                      ? <img key={pi} src={ph.dataUrl} alt="" style={{width:24,height:24,borderRadius:4,objectFit:"cover",border:"1px solid #333",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setViewPhoto(ph.dataUrl);}}/>
+                      : <div key={pi} style={{width:24,height:24,borderRadius:4,background:"#252540",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#555"}}>📷</div>
+                    )}
+                    {t.photos.length>2&&<div style={{width:24,height:24,borderRadius:4,background:"#252540",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#888"}}>+{t.photos.length-2}</div>}
+                  </div>
+                )}
+                <button onClick={e=>{e.stopPropagation();setEditing(t);}} style={{background:"transparent",border:"1px solid #252540",borderRadius:7,padding:"4px 9px",color:"#aaa",cursor:"pointer",fontSize:11}}>Edit</button>
+                <button onClick={e=>{e.stopPropagation();onDelete(t.id);}} style={{background:"transparent",border:"1px solid #ef444433",borderRadius:7,padding:"4px 9px",color:"#ef4444",cursor:"pointer",fontSize:11}}>✕</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Checkout photos section */}
+      {checkouts&&checkouts.length>0&&(
+        <div style={{marginTop:24}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>📸 Checkout Photos Today</div>
+            <div style={{fontSize:11,color:"#555"}}>{checkouts.filter(c=>(c.date||"").slice(0,10)===tod()).length} photos</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10}}>
+            {checkouts.filter(c=>(c.date||"").slice(0,10)===tod()).map((c,i)=>(
+              <div key={c.id||i} style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:12,overflow:"hidden",position:"relative"}}>
+                <div style={{cursor:"pointer"}} onClick={()=>setViewPhoto(c.photo)}>
+                  {c.photo
+                    ?<img src={c.photo} alt="" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/>
+                    :<div style={{width:"100%",height:120,background:"#0a0a1a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>📷</div>
+                  }
+                </div>
+                {/* Delete button */}
+                <button onClick={()=>onDeleteCheckout(c.id||i)} style={{position:"absolute",top:6,right:6,width:24,height:24,borderRadius:"50%",background:"#000000cc",border:"none",color:"#fff",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,zIndex:2}} title="Delete photo">✕</button>
+                <div style={{padding:"8px 10px"}}>
+                  <div style={{fontSize:11,color:"#fff",fontWeight:600}}>{c.userName||"Unknown"}</div>
+                  <div style={{fontSize:10,color:"#555",marginTop:2}}>📍 {c.location} · {c.time}</div>
+                  {c.note&&<div style={{fontSize:10,color:"#888",marginTop:2,fontStyle:"italic"}}>"{c.note}"</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {showCreate&&<TaskModal users={allUsers} rounds={rounds} onSave={onCreate} onSaveMultiple={onCreateMultiple} onClose={()=>setShowCreate(false)}/>}
+      {editing&&<TaskModal task={editing} users={allUsers} rounds={rounds} onSave={onUpdate} onClose={()=>setEditing(null)}/>}
+      {viewTask&&<TaskDetailDrawer
+        task={tasks.find(t=>t.id===viewTask.id)||viewTask}
+        allUsers={allUsers}
+        onClose={()=>setViewTask(null)}
+        onUpdate={t=>{onUpdate(t);setViewTask(t);}}
+        onDelete={id=>{onDelete(id);setViewTask(null);}}
+        onSendBack={t=>{onUpdate(t);setViewTask(null);}}
+      />}
+      {viewPhoto&&(
+        <div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"#000000e0",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",backdropFilter:"blur(8px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{position:"relative",maxWidth:"90vw",maxHeight:"90vh"}}>
+            <img src={viewPhoto} alt="task photo" style={{maxWidth:"90vw",maxHeight:"85vh",borderRadius:12,objectFit:"contain",display:"block"}}/>
+            <button onClick={()=>setViewPhoto(null)} style={{position:"absolute",top:-12,right:-12,width:32,height:32,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>✕</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// STAFF PANEL — with PIN display and reset
+// ═══════════════════════════════════════════════════════════
+function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDeleteProfile,extraProfiles,pins,onResetPin}){
+  const [showPins,setShowPins]=useState({});
+  const [showCreate,setShowCreate]=useState(false);
+  const [showPinReset,setShowPinReset]=useState(false);
+  const isFrantisek=adminUser?.id===FRANTISEK_ID;
+  const toggle=id=>setShowPins(p=>({...p,[id]:!p[id]}));
+  const getPin=u=>pins[u.id]||u.pin;
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Staff ({allUsers.length})</div>
+        <div style={{display:"flex",gap:10}}>
+          {isFrantisek&&<button onClick={()=>setShowPinReset(true)} style={{padding:"10px 16px",background:"#ef444422",border:"1px solid #ef444444",borderRadius:10,color:"#ef4444",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>🔐 Reset PIN</button>}
+          {isFrantisek&&<button onClick={()=>setShowCreate(true)} style={{padding:"10px 20px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>+ Create Profile</button>}
+        </div>
+      </div>
+      {!isFrantisek&&<div style={{background:"#111128",border:"1px solid #252540",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:12,color:"#555"}}>
+        Profile creation and PIN reset are restricted to Frantisek Kabilka.
+      </div>}
+      {ROLES.map(role=>{
+        const ru=allUsers.filter(u=>u.role===role);if(!ru.length)return null;
+        const color=RC[role];
+        return(
+          <div key={role} style={{marginBottom:28}}>
+            <div style={{fontSize:11,color,textTransform:"uppercase",letterSpacing:2,fontWeight:700,marginBottom:10}}>{RL[role]} ({ru.length})</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
+              {ru.map(u=>{
+                const mine=tasks.filter(t=>t.assigneeId===u.id);
+                const done=mine.filter(t=>t.status==="done").length;
+                const pend=mine.filter(t=>["pending","in_progress"].includes(t.status)).length;
+                const rate=mine.length?Math.round(done/mine.length*100):0;
+                const loc=liveLocations[u.id];
+                const isCustom=u.custom;
+                return(
+                  <div key={u.id} style={{background:"#111128",border:`1px solid ${color}22`,borderRadius:14,padding:"16px",position:"relative"}}>
+                    {isCustom&&<div style={{position:"absolute",top:10,right:10,background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:6,padding:"2px 7px",fontSize:9,color:"#d4a843",fontWeight:700}}>CUSTOM</div>}
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      <div style={{position:"relative"}}>
+                        <Av name={u.name} size={42} color={color}/>
+                        {loc&&<div style={{position:"absolute",bottom:-2,right:-2,width:10,height:10,borderRadius:"50%",background:"#22c55e",border:"2px solid #111128"}}/>}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{color:"#fff",fontSize:13,fontWeight:700}}>{u.name}</div>
+                        <Badge label={RL[role]} color={color} sm/>
+                      </div>
+                    </div>
+                    {loc&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:"6px 10px",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                      <span>📡</span><span style={{fontSize:11,color:"#22c55e",fontWeight:600}}>{loc.location}</span><span style={{fontSize:9,color:"#555",marginLeft:"auto"}}>{loc.time}</span>
+                    </div>}
+                    <div style={{background:"#0a0a1a",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div>
+                          <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>🔐 PIN</div>
+                          <div style={{color:showPins[u.id]?color:"#333",fontSize:18,fontWeight:900,letterSpacing:4,fontFamily:"monospace"}}>{showPins[u.id]?getPin(u):"•••••"}</div>
+                        </div>
+                        <button onClick={()=>toggle(u.id)} style={{background:"transparent",border:`1px solid ${color}44`,borderRadius:8,padding:"5px 10px",color,fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                          {showPins[u.id]?"Hide":"Show"}
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{background:"#0a0a1a",borderRadius:10,padding:"8px 12px",marginBottom:10}}>
+                      <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>📡 NFC</div>
+                      <div style={{color:"#888",fontSize:11,fontFamily:"monospace"}}>{u.nfc}</div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
+                      {[{l:"Pending",v:pend,c:"#f97316"},{l:"Done",v:done,c:"#22c55e"},{l:"Rate",v:`${rate}%`,c:color}].map(s=>(
+                        <div key={s.l} style={{textAlign:"center",background:"#0a0a1a",borderRadius:8,padding:"6px 0"}}>
+                          <div style={{fontSize:14,fontWeight:800,color:s.c}}>{s.v}</div>
+                          <div style={{fontSize:8,color:"#555",textTransform:"uppercase"}}>{s.l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{height:3,background:"#1e1e38",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${rate}%`,background:color,borderRadius:3}}/>
+                    </div>
+                    {isCustom&&isFrantisek&&<button onClick={()=>onDeleteProfile(u.id)} style={{marginTop:10,width:"100%",background:"transparent",border:"1px solid #ef444433",borderRadius:8,padding:"6px",color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Remove</button>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {showCreate&&<CreateProfileModal onSave={onAddProfile} onClose={()=>setShowCreate(false)} existingProfiles={extraProfiles}/>}
+      {showPinReset&&<PinResetModal users={allUsers} pins={pins} onSave={onResetPin} onClose={()=>setShowPinReset(false)}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIVE LOCATIONS
+// ═══════════════════════════════════════════════════════════
+function LiveLocations({liveLocations,allUsers}){
+  const active=allUsers.filter(u=>liveLocations[u.id]);
+  const byLoc={};
+  active.forEach(u=>{const loc=liveLocations[u.id]?.location;if(loc){if(!byLoc[loc])byLoc[loc]=[];byLoc[loc].push({...u,...liveLocations[u.id]});}});
+  const inactive=allUsers.filter(u=>!liveLocations[u.id]);
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Live Locations</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:"#22c55e"}}/>
+          <span style={{fontSize:12,color:"#22c55e",fontWeight:600}}>{active.length} staff active</span>
+        </div>
+      </div>
+      <div style={{background:"#0a0a1a",border:"1px solid #22c55e22",borderRadius:14,padding:"12px 18px",marginBottom:20,fontSize:12,color:"#555",display:"flex",gap:10}}>
+        <span style={{fontSize:18}}>📡</span><div><span style={{color:"#aaa",fontWeight:600}}>NFC Location Tracking · </span>Staff tap NFC tags at their work area. Checkout requires a live photo.</div>
+      </div>
+      {Object.keys(byLoc).length>0&&(
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:11,color:"#22c55e",textTransform:"uppercase",letterSpacing:2,fontWeight:700,marginBottom:12}}>Active Now</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+            {Object.entries(byLoc).map(([loc,staff])=>(
+              <div key={loc} style={{background:"#111128",border:"1px solid #22c55e22",borderRadius:14,padding:"14px 16px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#22c55e",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span>📡</span>{loc}</div>
+                {staff.map(s=>{const color=RC[s.role]||"#666";return(
+                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 10px",background:"#0a0a1a",borderRadius:10}}>
+                    <Av name={s.name} size={30} color={color}/>
+                    <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{s.name}</div><div style={{fontSize:10,color:"#555"}}>since {s.time}</div></div>
+                    <Badge label={s.role} color={color} sm/>
+                  </div>
+                );})}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {inactive.length>0&&(
+        <div>
+          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:2,fontWeight:700,marginBottom:10}}>No Location Set ({inactive.length})</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {inactive.map(u=>{const color=RC[u.role]||"#666";return(
+              <div key={u.id} style={{display:"flex",alignItems:"center",gap:8,background:"#111128",border:"1px solid #1e1e38",borderRadius:10,padding:"8px 12px"}}>
+                <Av name={u.name} size={26} color={color}/>
+                <div><div style={{fontSize:12,fontWeight:600,color:"#666"}}>{u.name}</div><div style={{fontSize:9,color:"#333",textTransform:"uppercase"}}>{u.role}</div></div>
+              </div>
+            );})}
+          </div>
+        </div>
+      )}
+      {active.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}><div style={{fontSize:36,marginBottom:12}}>📡</div>No staff have set their location yet.</div>}
+    </div>
+  );
+}
+
+// Repairs, Orders, Inspections, Locations panels
+function RepairsPanel({repairs,allUsers,onUpdate}){
+  const getUser=id=>allUsers.find(u=>u.id===id);
+  return(
+    <div>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Repair Reports ({repairs.length})</div>
+      {repairs.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}>No repairs yet</div>
+      :[...repairs].sort((a,b)=>b.date>a.date?1:-1).map(r=>{
+        const u=getUser(r.reportedBy),uc=PC[r.urgency]||"#6b7280";
+        const sc=r.status==="open"?"#f97316":r.status==="in_progress"?"#3b82f6":"#22c55e";
+        return(
+          <div key={r.id} style={{background:"#111128",border:`1px solid ${uc}22`,borderRadius:14,padding:"16px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",gap:10,marginBottom:6}}><span style={{fontSize:20}}>🔧</span><div>
+                  <div style={{fontSize:15,fontWeight:700,color:"#fff"}}>{r.title}</div>
+                  <div style={{fontSize:11,color:"#888",marginTop:2}}>📍 {r.location} · {df(r.date)} · {u?.name||"Unknown"}</div>
+                </div></div>
+                {r.description&&<div style={{fontSize:12,color:"#888",marginLeft:30}}>{r.description}</div>}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",marginLeft:12,flexShrink:0}}>
+                <Badge label={r.urgency||"medium"} color={uc} sm/>
+                <select value={r.status} onChange={e=>onUpdate({...r,status:e.target.value})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"3px 8px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif"}}>
+                  {["open","in_progress","resolved"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OrdersPanel({orders,allUsers,onUpdate}){
+  const getUser=id=>allUsers.find(u=>u.id===id);
+  return(
+    <div>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Supply Orders ({orders.length})</div>
+      {orders.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}>No orders yet</div>
+      :[...orders].sort((a,b)=>b.date>a.date?1:-1).map(o=>{
+        const u=getUser(o.requestedBy),sc=o.status==="pending"?"#f97316":"#22c55e";
+        return(
+          <div key={o.id} style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:14,padding:"16px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:4}}>🛒 {o.location}</div>
+                <div style={{fontSize:11,color:"#888",marginBottom:10}}>{dfShort(o.date)} · {u?.name||"Unknown"}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {o.items?.map((it,i)=><span key={i} style={{fontSize:11,color:"#ccc",background:"#0a0a1a",border:"1px solid #252540",borderRadius:8,padding:"3px 10px"}}>{it.icon} {it.name} ×{it.qty}</span>)}
+                </div>
+              </div>
+              <select value={o.status} onChange={e=>onUpdate({...o,status:e.target.value})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"4px 10px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif",marginLeft:12}}>
+                {["pending","fulfilled"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InspectionsPanel({inspections,allUsers}){
+  const getUser=id=>allUsers.find(u=>u.id===id);
+  const sc=s=>s>=90?"#22c55e":s>=70?"#eab308":"#ef4444";
+  return(
+    <div>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Inspections ({inspections.length})</div>
+      {inspections.length===0?<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}>No inspections yet</div>
+      :[...inspections].sort((a,b)=>b.date>a.date?1:-1).map(ins=>{
+        const u=getUser(ins.inspector);
+        return(
+          <div key={ins.id} style={{background:"#111128",border:`1px solid ${sc(ins.score)}33`,borderRadius:14,padding:"18px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:4}}>📍 {ins.location}</div>
+                <div style={{fontSize:11,color:"#888",marginBottom:10}}>{dfShort(ins.date)} · {u?.name||"Unknown"}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {ins.areas?.filter(a=>a.rating!==null).map((a,i)=>{const c=a.rating>=4?"#22c55e":a.rating>=3?"#eab308":"#ef4444";return <span key={i} style={{fontSize:11,color:c,background:`${c}15`,border:`1px solid ${c}33`,borderRadius:8,padding:"3px 10px"}}>{a.area.split("/")[0].trim()}: {a.rating}/5</span>;})}
+                </div>
+              </div>
+              <div style={{textAlign:"center",minWidth:60}}>
+                <div style={{fontSize:36,fontWeight:900,color:sc(ins.score),fontFamily:"Georgia,serif"}}>{ins.score}</div>
+                <div style={{fontSize:9,color:"#555",textTransform:"uppercase"}}>Score</div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// ROUNDS PANEL — view + edit predefined rounds (Frantisek only)
+// ═══════════════════════════════════════════════════════════
+function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
+  const [editing,setEditing]=useState(null);
+  const [form,setForm]=useState(null);
+  const RC2={cleaner:"#4ade80",porter:"#fb923c",reception:"#38bdf8"};
+  const deptLabel={cleaner:"Cleaner",porter:"Porter",reception:"Reception"};
+
+  const startEdit=r=>{setEditing(r.id);setForm({...r,areas:[...r.areas],tasks:[...r.tasks]});};
+  const cancelEdit=()=>{setEditing(null);setForm(null);};
+  const saveEdit=()=>{
+    const updated=rounds.map(r=>r.id===form.id?{...form}:r);
+    onSave(updated);
+    setEditing(null);setForm(null);
+  };
+  const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const setArea=(i,v)=>setForm(f=>({...f,areas:f.areas.map((a,ai)=>ai===i?v:a)}));
+  const addArea=()=>setForm(f=>({...f,areas:[...f.areas,""]}));
+  const removeArea=i=>setForm(f=>({...f,areas:f.areas.filter((_,ai)=>ai!==i)}));
+  const setTask=(i,v)=>setForm(f=>({...f,tasks:f.tasks.map((t,ti)=>ti===i?v:t)}));
+  const addTask=()=>setForm(f=>({...f,tasks:[...f.tasks,""]}));
+  const removeTask=i=>setForm(f=>({...f,tasks:f.tasks.filter((_,ti)=>ti!==i)}));
+
+  // Group by dept
+  const byDept={};
+  rounds.forEach(r=>{if(!byDept[r.dept])byDept[r.dept]=[];byDept[r.dept].push(r);});
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Predefined Rounds</div>
+        {isFrantisek&&<div style={{fontSize:11,color:"#d4a843",background:"#d4a84315",border:"1px solid #d4a84333",borderRadius:8,padding:"4px 12px"}}>✏️ You can edit all rounds</div>}
+      </div>
+      <div style={{fontSize:13,color:"#555",marginBottom:20}}>Pre-configured daily cleaning and porter rounds. Each round can be used to bulk-assign tasks to staff.</div>
+
+      {/* Edit modal */}
+      {editing&&form&&(
+        <div style={{position:"fixed",inset:0,background:"#000000b0",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}>
+          <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:680,maxHeight:"92vh",overflow:"auto",padding:"28px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Edit Round</div>
+              <button onClick={cancelEdit} style={{background:"transparent",border:"none",color:"#666",cursor:"pointer",fontSize:22}}>✕</button>
+            </div>
+            <div style={{display:"grid",gap:14}}>
+              <div><label style={L}>Round Name</label><input style={I} value={form.name} onChange={e=>setF("name",e.target.value)}/></div>
+              <div><label style={L}>Position Label</label><input style={I} value={form.position} onChange={e=>setF("position",e.target.value)} placeholder="e.g. Cleaner 1"/></div>
+              <div><label style={L}>Focus / Description</label><input style={I} value={form.focus} onChange={e=>setF("focus",e.target.value)}/></div>
+              <div>
+                <label style={L}>Areas ({form.areas.length})</label>
+                {form.areas.map((a,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:6}}>
+                    <input style={{...I,flex:1}} value={a} onChange={e=>setArea(i,e.target.value)} placeholder="Area name…"/>
+                    <button onClick={()=>removeArea(i)} style={{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,flexShrink:0}}>✕</button>
+                  </div>
+                ))}
+                <button onClick={addArea} style={{padding:"7px 14px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif",marginTop:4}}>+ Add Area</button>
+              </div>
+              <div>
+                <label style={L}>Task Checklist ({form.tasks.length} items)</label>
+                {form.tasks.map((t,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:6}}>
+                    <input style={{...I,flex:1}} value={t} onChange={e=>setTask(i,e.target.value)} placeholder="Task item…"/>
+                    <button onClick={()=>removeTask(i)} style={{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,flexShrink:0}}>✕</button>
+                  </div>
+                ))}
+                <button onClick={addTask} style={{padding:"7px 14px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif",marginTop:4}}>+ Add Task</button>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:4}}>
+                <button onClick={cancelEdit} style={{flex:1,padding:"12px",background:"transparent",border:"1px solid #252540",borderRadius:12,color:"#666",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
+                <button onClick={saveEdit} style={{flex:2,padding:"12px",background:"#d4a843",border:"none",borderRadius:12,color:"#000",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rounds grid */}
+      {Object.entries(byDept).map(([dept,deptRounds])=>{
+        const colour=RC2[dept]||"#d4a843";
+        return(
+          <div key={dept} style={{marginBottom:32}}>
+            <div style={{fontSize:11,color:colour,textTransform:"uppercase",letterSpacing:2,fontWeight:700,marginBottom:12}}>
+              {deptLabel[dept]||dept} ({deptRounds.length} rounds)
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:12}}>
+              {deptRounds.map(r=>(
+                <div key={r.id} style={{background:"#111128",border:`1px solid ${colour}22`,borderRadius:16,padding:"18px",position:"relative"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:800,color:"#fff"}}>{r.name}</div>
+                      <div style={{fontSize:11,color:colour,marginTop:2}}>{r.position}</div>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{background:`${colour}22`,color:colour,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10,textTransform:"uppercase"}}>{r.id}</span>
+                      {isFrantisek&&<button onClick={()=>startEdit(r)} style={{padding:"5px 12px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif"}}>✏️ Edit</button>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:"#888",fontStyle:"italic",marginBottom:10}}>{r.focus}</div>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Areas ({r.areas.length})</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                      {r.areas.map((a,i)=>(
+                        <span key={i} style={{fontSize:10,background:`${colour}15`,color:colour,border:`1px solid ${colour}33`,borderRadius:6,padding:"2px 8px"}}>{a}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Checklist ({r.tasks.length} tasks)</div>
+                    {r.tasks.slice(0,4).map((t,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                        <div style={{width:6,height:6,borderRadius:"50%",background:colour,flexShrink:0}}/>
+                        <span style={{fontSize:11,color:"#aaa"}}>{t}</span>
+                      </div>
+                    ))}
+                    {r.tasks.length>4&&<div style={{fontSize:10,color:"#555",marginTop:2}}>+{r.tasks.length-4} more tasks…</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ROOT ADMIN APP
+// ═══════════════════════════════════════════════════════════
+export default function AdminPanel(){
+  const [adminUser,setAdminUser]         = useState(null);
+  const [extraProfiles,setExtraProfiles] = useState([]);
+  const [tasks,setTasks]                 = useState([]);
+  const [repairs,setRepairs]             = useState([]);
+  const [orders,setOrders]               = useState([]);
+  const [inspections,setInspections]     = useState([]);
+  const [checkouts,setCheckouts]         = useState([]);
+  const [liveLocations,setLiveLocations] = useState({});
+  const [tab,setTab]                     = useState("overview");
+  const [loading,setLoading]             = useState(true);
+  const [lastSync,setLastSync]           = useState(null);
+  const [pins,setPins]                   = useState({}); // overridden PINs
+  const [rounds,setRounds]               = useState(DEFAULT_ROUNDS);
+
+  const allUsers=[...BASE_USERS,...extraProfiles];
+
+  const loadAll=useCallback(async()=>{
+    const [tk,r,o,ins,ep,co,pns,rnd]=await Promise.all([
+      stor.get(SK.tasks),stor.get(SK.repairs),stor.get(SK.orders),
+      stor.get(SK.inspections),stor.get(SK.profiles),stor.get(SK.checkouts),
+      stor.get(SK.pins),stor.get(SK.rounds),
+    ]);
+    if(tk!==null)setTasks(tk);
+    if(r!==null)setRepairs(r);
+    if(o!==null)setOrders(o);
+    if(ins!==null)setInspections(ins);
+    if(ep!==null)setExtraProfiles(ep);
+    if(co!==null)setCheckouts(co);
+    if(pns!==null)setPins(pns);
+    if(rnd!==null)setRounds(rnd);
+    const locData={};
+    await Promise.all([...BASE_USERS,...(ep||[])].map(async u=>{
+      const d=await stor.get(SK.locPrefix+u.id);
+      if(d?.location)locData[u.id]=d;
+    }));
+    setLiveLocations(locData);
+    setLastSync(new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+  },[]);
+
+  useEffect(()=>{
+    (async()=>{
+      // Always require PIN login — never auto-restore admin session
+      // (prevents bypassing login screen on page load)
+      await stor.del(SK.adminSess);
+      await loadAll();
+      setLoading(false);
+    })();
+    const iv=setInterval(loadAll,10000);
+    return()=>clearInterval(iv);
+  },[loadAll]);
+
+  const handleLogin=async u=>{await stor.set(SK.adminSess,{id:u.id});setAdminUser(u);};
+  const handleLogout=async()=>{await stor.del(SK.adminSess);setAdminUser(null);};
+
+  const saveTasks  =async t=>{await stor.set(SK.tasks,t);setTasks(t);};
+  const saveRepairs=async r=>{await stor.set(SK.repairs,r);setRepairs(r);};
+  const saveOrders =async o=>{await stor.set(SK.orders,o);setOrders(o);};
+
+  const addProfile=async p=>{const n=[...extraProfiles,p];await stor.set(SK.profiles,n);setExtraProfiles(n);};
+  const deleteProfile=async id=>{const n=extraProfiles.filter(p=>p.id!==id);await stor.set(SK.profiles,n);setExtraProfiles(n);};
+
+  const handlePinReset=async(userId,newPin)=>{
+    const updated={...pins,[userId]:newPin};
+    await stor.set(SK.pins,updated);
+    setPins(updated);
+  };
+
+  const pendCount=tasks.filter(t=>["pending","in_progress"].includes(t.status)).length;
+  const repCount=repairs.filter(r=>r.status==="open").length;
+  const ordCount=orders.filter(o=>o.status==="pending").length;
+  const locCount=Object.keys(liveLocations).length;
+
+  const navItems=[
+    {id:"overview",      l:"Overview",       e:"◈"},
+    {id:"tasks",         l:"Tasks",          e:"✓",  badge:pendCount},
+    {id:"locations_live",l:"Live Locations", e:"📡", badge:locCount},
+    {id:"report",        l:"Daily Report",   e:"📄"},
+    {id:"staff",         l:"Staff",          e:"👤"},
+    {id:"repairs",       l:"Repairs",        e:"🔧", badge:repCount},
+    {id:"orders",        l:"Supplies",       e:"🛒", badge:ordCount},
+    {id:"inspections",   l:"Inspections",    e:"⭐"},
+    {id:"rounds",        l:"Rounds",         e:"🔄"},
+  ];
+
+  if(loading)return <div style={{minHeight:"100vh",background:"#070714",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#d4a843",fontFamily:"Georgia,serif",fontSize:26}}>SFH Admin</div></div>;
+  if(!adminUser)return <AdminLogin onLogin={handleLogin} allUsers={allUsers} pins={pins}/>;
+
+  return(
+    <div style={{minHeight:"100vh",background:"#070714",fontFamily:"'DM Sans',sans-serif",display:"flex"}}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+      <div style={{width:220,background:"#09091a",borderRight:"1px solid #181832",display:"flex",flexDirection:"column",padding:"24px 0",flexShrink:0,position:"sticky",top:0,height:"100vh",overflow:"auto"}}>
+        <div style={{padding:"0 20px 28px"}}>
+          <div style={{fontSize:20,fontWeight:900,color:"#d4a843",fontFamily:"Georgia,serif",letterSpacing:-.5}}>Soho House</div>
+          <div style={{fontSize:9,color:"#444",letterSpacing:3,textTransform:"uppercase",marginTop:2}}>Management Portal</div>
+          <div style={{width:30,height:1,background:"#d4a84344",marginTop:10}}/>
+        </div>
+        {navItems.map(n=>(
+          <button key={n.id} onClick={()=>setTab(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"11px 20px",background:tab===n.id?"#d4a84315":"transparent",border:"none",borderLeft:tab===n.id?"3px solid #d4a843":"3px solid transparent",color:tab===n.id?"#d4a843":"#555",cursor:"pointer",fontSize:13,fontWeight:tab===n.id?700:500,textAlign:"left",fontFamily:"'DM Sans',sans-serif",transition:"all .15s"}}>
+            <span style={{fontSize:15}}>{n.e}</span>{n.l}
+            {n.badge>0&&<span style={{marginLeft:"auto",background:n.id==="locations_live"?"#22c55e":"#ef4444",color:"#fff",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 7px"}}>{n.badge}</span>}
+          </button>
+        ))}
+        <div style={{marginTop:"auto",padding:"16px 20px",borderTop:"1px solid #181832"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 10px",background:"#d4a84312",borderRadius:10,border:"1px solid #d4a84322"}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:"#d4a84325",border:"2px solid #d4a84355",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#d4a843",fontFamily:"Georgia,serif",flexShrink:0}}>
+              {adminUser.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,color:"#d4a843",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{adminUser.name.split(" ")[0]}</div>
+              <div style={{fontSize:9,color:"#555"}}>{adminUser.id===FRANTISEK_ID?"Manager + Profile + PIN Reset":"Manager"}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:"#22c55e"}}/>
+            <div style={{fontSize:10,color:"#3a7a54"}}>Live sync · Supabase</div>
+          </div>
+          <div style={{fontSize:9,color:"#333",marginBottom:6}}>Last: {lastSync||"—"}</div>
+          <button onClick={loadAll} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>↻ Refresh</button>
+          <button onClick={handleLogout} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #ef444433",borderRadius:8,color:"#ef4444",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Sign Out</button>
+        </div>
+      </div>
+      <div style={{flex:1,padding:"32px",overflowX:"auto",overflowY:"auto"}}>
+        {tab==="overview"      &&<Overview tasks={tasks} repairs={repairs} orders={orders} inspections={inspections} liveLocations={liveLocations} allUsers={allUsers} onNav={tabId=>setTab(tabId)}/>}
+        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasks([...tasks,t])} onCreateMultiple={newTasks=>saveTasks([...tasks,...newTasks])} onUpdate={t=>saveTasks(tasks.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasks.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
+        {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
+        {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
+        {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
+        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x))}/>}
+        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))}/>}
+        {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
+        {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
+      </div>
+    </div>
+  );
+}
