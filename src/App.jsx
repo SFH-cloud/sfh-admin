@@ -1695,6 +1695,8 @@ function InspectionsPanel({inspections,allUsers}){
 function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
   const [editing,setEditing]=useState(null);
   const [form,setForm]=useState(null);
+  const [showCreate,setShowCreate]=useState(false);
+  const [createForm,setCreateForm]=useState({name:"",dept:"cleaner",position:"",focus:"",areas:[],tasks:[],colour:"#4ade80"});
   const RC2={cleaner:"#4ade80",porter:"#fb923c",reception:"#38bdf8"};
   const deptLabel={cleaner:"Cleaner",porter:"Porter",reception:"Reception"};
 
@@ -1705,6 +1707,31 @@ function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
     onSave(updated);
     setEditing(null);setForm(null);
   };
+  const startCreate=()=>{
+    setCreateForm({name:"",dept:"cleaner",position:"",focus:"",areas:[""],tasks:[""],colour:"#4ade80"});
+    setShowCreate(true);
+  };
+  const cancelCreate=()=>setShowCreate(false);
+  const saveCreate=()=>{
+    if(!createForm.name.trim()){alert("Round name required");return;}
+    const newRound={
+      ...createForm,
+      id:"R-"+Date.now(),
+      areas:createForm.areas.filter(a=>a.trim()),
+      tasks:createForm.tasks.filter(t=>t.trim()),
+      colour:RC2[createForm.dept]||"#d4a843",
+    };
+    onSave([...rounds,newRound]);
+    setShowCreate(false);
+  };
+  const setCF=(k,v)=>setCreateForm(f=>({...f,[k]:v}));
+  const setCFArea=(i,v)=>setCreateForm(f=>({...f,areas:f.areas.map((a,ai)=>ai===i?v:a)}));
+  const addCFArea=()=>setCreateForm(f=>({...f,areas:[...f.areas,""]}));
+  const removeCFArea=i=>setCreateForm(f=>({...f,areas:f.areas.filter((_,ai)=>ai!==i)}));
+  const setCFTask=(i,v)=>setCreateForm(f=>({...f,tasks:f.tasks.map((t,ti)=>ti===i?v:t)}));
+  const addCFTask=()=>setCreateForm(f=>({...f,tasks:[...f.tasks,""]}));
+  const removeCFTask=i=>setCreateForm(f=>({...f,tasks:f.tasks.filter((_,ti)=>ti!==i)}));
+  const deleteRound=id=>{if(!confirm("Delete this round?"))return;onSave(rounds.filter(r=>r.id!==id));};
   const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
   const setArea=(i,v)=>setForm(f=>({...f,areas:f.areas.map((a,ai)=>ai===i?v:a)}));
   const addArea=()=>setForm(f=>({...f,areas:[...f.areas,""]}));
@@ -1721,9 +1748,57 @@ function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Predefined Rounds</div>
-        {isFrantisek&&<div style={{fontSize:11,color:"#d4a843",background:"#d4a84315",border:"1px solid #d4a84333",borderRadius:8,padding:"4px 12px"}}>✏️ You can edit all rounds</div>}
+        {isFrantisek&&<button onClick={startCreate} style={{padding:"10px 20px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>+ New Round</button>}
       </div>
       <div style={{fontSize:13,color:"#555",marginBottom:20}}>Pre-configured daily cleaning and porter rounds. Each round can be used to bulk-assign tasks to staff.</div>
+
+      {/* Create modal */}
+      {showCreate&&(
+        <div style={{position:"fixed",inset:0,background:"#000000b0",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}>
+          <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:680,maxHeight:"92vh",overflow:"auto",padding:"28px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Create New Round</div>
+              <button onClick={cancelCreate} style={{background:"transparent",border:"none",color:"#666",cursor:"pointer",fontSize:22}}>✕</button>
+            </div>
+            <div style={{display:"grid",gap:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div><label style={L}>Round Name *</label><input style={I} value={createForm.name} onChange={e=>setCF("name",e.target.value)} placeholder="e.g. Round 3 — Cleaner 1"/></div>
+                <div><label style={L}>Department</label>
+                  <select style={I} value={createForm.dept} onChange={e=>setCF("dept",e.target.value)}>
+                    {["cleaner","porter","reception","management"].map(d=><option key={d} value={d}>{d.charAt(0).toUpperCase()+d.slice(1)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div><label style={L}>Position Label</label><input style={I} value={createForm.position} onChange={e=>setCF("position",e.target.value)} placeholder="e.g. Cleaner 3"/></div>
+              <div><label style={L}>Focus / Description</label><input style={I} value={createForm.focus} onChange={e=>setCF("focus",e.target.value)} placeholder="e.g. Deep clean — toilets & surfaces"/></div>
+              <div>
+                <label style={L}>Areas ({createForm.areas.filter(a=>a.trim()).length})</label>
+                {createForm.areas.map((a,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:6}}>
+                    <input style={{...I,flex:1}} value={a} onChange={e=>setCFArea(i,e.target.value)} placeholder={`Area ${i+1}…`}/>
+                    <button onClick={()=>removeCFArea(i)} style={{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,flexShrink:0}}>✕</button>
+                  </div>
+                ))}
+                <button onClick={addCFArea} style={{padding:"7px 14px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>+ Add Area</button>
+              </div>
+              <div>
+                <label style={L}>Task Checklist ({createForm.tasks.filter(t=>t.trim()).length} items)</label>
+                {createForm.tasks.map((t,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:6}}>
+                    <input style={{...I,flex:1}} value={t} onChange={e=>setCFTask(i,e.target.value)} placeholder={`Task ${i+1}…`}/>
+                    <button onClick={()=>removeCFTask(i)} style={{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,flexShrink:0}}>✕</button>
+                  </div>
+                ))}
+                <button onClick={addCFTask} style={{padding:"7px 14px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>+ Add Task</button>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:4}}>
+                <button onClick={cancelCreate} style={{flex:1,padding:"12px",background:"transparent",border:"1px solid #252540",borderRadius:12,color:"#666",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
+                <button onClick={saveCreate} style={{flex:2,padding:"12px",background:"#d4a843",border:"none",borderRadius:12,color:"#000",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Create Round</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit modal */}
       {editing&&form&&(
@@ -1784,7 +1859,10 @@ function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
                     </div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <span style={{background:`${colour}22`,color:colour,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10,textTransform:"uppercase"}}>{r.id}</span>
-                      {isFrantisek&&<button onClick={()=>startEdit(r)} style={{padding:"5px 12px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif"}}>✏️ Edit</button>}
+                      {isFrantisek&&<div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>startEdit(r)} style={{padding:"5px 12px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif"}}>✏️ Edit</button>
+                      {r.id.startsWith("R-")&&<button onClick={()=>deleteRound(r.id)} style={{padding:"5px 10px",background:"transparent",border:"1px solid #ef444433",borderRadius:8,color:"#ef4444",cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif"}}>✕</button>}
+                    </div>}
                     </div>
                   </div>
                   <div style={{fontSize:11,color:"#888",fontStyle:"italic",marginBottom:10}}>{r.focus}</div>
