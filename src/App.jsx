@@ -1415,9 +1415,16 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
         task={tasks.find(t=>t.id===viewTask.id)||viewTask}
         allUsers={allUsers}
         onClose={()=>setViewTask(null)}
-        onUpdate={t=>{onUpdate(t);setViewTask(t);}}
+        onUpdate={t=>{
+          // Use saveTasks directly with functional update to avoid stale closure
+          saveTasks(prev=>prev.map(x=>x.id===t.id?t:x));
+          setViewTask(t);
+        }}
         onDelete={id=>{onDelete(id);setViewTask(null);}}
-        onSendBack={t=>{onUpdate(t);setViewTask(null);}}
+        onSendBack={t=>{
+          saveTasks(prev=>prev.map(x=>x.id===t.id?t:x));
+          setViewTask(null);
+        }}
       />}
       {viewPhoto&&(
         <div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"#000000e0",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",backdropFilter:"blur(8px)"}}>
@@ -2822,7 +2829,13 @@ export default function AdminPanel(){
   const handleLogin=async u=>{await stor.set(SK.adminSess,{id:u.id});setAdminUser(u);};
   const handleLogout=async()=>{await stor.del(SK.adminSess);setAdminUser(null);};
 
-  const saveTasks  =async t=>{await stor.set(SK.tasks,t);setTasks(t);};
+  const saveTasks  =async tOrFn=>{
+    setTasks(prev=>{
+      const next=typeof tOrFn==='function'?tOrFn(prev):tOrFn;
+      stor.set(SK.tasks,next); // save to Supabase
+      return next;
+    });
+  };
   // Send push when new tasks are added
   const saveTasksWithNotify=async(newTasks, prevTasks)=>{
     await stor.set(SK.tasks,newTasks);
