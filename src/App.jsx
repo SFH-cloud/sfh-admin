@@ -299,7 +299,7 @@ function AdminLogin({onLogin,allUsers,pins}){
             <div>
               <div style={{color:"#fff",fontSize:15,fontWeight:700}}>{u.name}</div>
               <div style={{color:"#555",fontSize:11,marginTop:2}}>
-                "Manager"
+                {u.id===FRANTISEK_ID?"Admin Manager":"Manager"}
               </div>
             </div>
           </button>
@@ -1098,6 +1098,8 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
   const [showCreate,setShowCreate]=useState(false);
   const [viewPhoto,setViewPhoto]=useState(null); // lightbox
   const [viewTask,setViewTask]=useState(null);   // task detail drawer
+  const [expandedUsers,setExpandedUsers]=useState({}); // {userId: true/false}
+  const toggleUser=id=>setExpandedUsers(s=>({...s,[id]:!s[id]}));
   const getUser=id=>allUsers.find(u=>u.id===id);
   const filt=tasks.filter(t=>{
     if(filter.status!=="all"&&t.status!==filter.status)return false;
@@ -1123,58 +1125,114 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
         ))}
         <button onClick={()=>setFilter({status:"all",role:"all",priority:"all",search:""})} style={{...sel,cursor:"pointer",color:"#d4a843",borderColor:"#d4a84344",background:"transparent"}}>Reset</button>
       </div>
-      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 0.8fr 1fr 0.7fr 110px",borderBottom:"1px solid #1e1e38",padding:"10px 16px"}}>
-          {["Task","Location","Assigned To","Priority","Status","Due",""].map(h=>(
-            <div key={h} style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{h}</div>
-          ))}
-        </div>
-        <div style={{padding:"6px 16px",borderBottom:"1px solid #0a0a1a",background:"#0a0a1a"}}>
-          <span style={{fontSize:9,color:"#333"}}>👆 Click any row to see live task progress</span>
-        </div>
-        {filt.length===0?<div style={{padding:"40px",textAlign:"center",color:"#555"}}>No tasks match filters</div>
-        :filt.map(t=>{
-          const pc=PC[t.priority]||"#6b7280",sc=SC[t.status]||"#6b7280";
-          const u=getUser(t.assigneeId),rc=RC[u?.role]||"#666";
-          const prog=t.checklist?.length?Math.round(t.checklist.filter(c=>c.done).length/t.checklist.length*100):null;
+      {filt.length===0
+        ?<div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"40px",textAlign:"center",color:"#555"}}>No tasks match filters</div>
+        :(()=>{
+          // Group filtered tasks by assignee
+          const byUser={};
+          filt.forEach(t=>{
+            const uid=t.assigneeId||"__unassigned__";
+            if(!byUser[uid])byUser[uid]=[];
+            byUser[uid].push(t);
+          });
+          // Sort groups: by role order then name
+          const roleOrder={management:0,reception:1,porter:2,cleaner:3};
+          const groups=Object.entries(byUser).sort(([aId],[bId])=>{
+            const au=getUser(aId),bu=getUser(bId);
+            const ro=(roleOrder[au?.role]??9)-(roleOrder[bu?.role]??9);
+            if(ro!==0)return ro;
+            return (au?.name||"").localeCompare(bu?.name||"");
+          });
+
           return(
-            <div key={t.id} onClick={()=>setViewTask(t)} style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 0.8fr 1fr 0.7fr 110px",padding:"11px 16px",borderBottom:"1px solid #0a0a1a",alignItems:"center",cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div>
-                <div style={{color:"#fff",fontSize:13,fontWeight:600}}>{typeEm[t.type]||"📋"} {t.title}</div>
-                {t.roundId&&<div style={{fontSize:9,color:"#a78bfa",marginTop:1}}>🔄 Round · Area {t.roundArea}/{t.roundTotal}</div>}
-                {prog!==null&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
-                  <div style={{width:60,height:3,background:"#1e1e38",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${prog}%`,background:"#d4a843",borderRadius:3}}/></div>
-                  <span style={{fontSize:9,color:"#555"}}>{prog}%</span>
-                </div>}
-              </div>
-              <div style={{color:"#888",fontSize:12}}>{t.location||"—"}</div>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>{u?<><Av name={u.name} size={22} color={rc}/><span style={{color:"#aaa",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name.split(" ")[0]}</span></>:<span style={{color:"#555",fontSize:11}}>—</span>}</div>
-              <div><Badge label={t.priority||"—"} color={pc} sm/></div>
-              <div onClick={e=>e.stopPropagation()}>
-                <select value={t.status} onChange={e=>onUpdate({...t,status:e.target.value,updatedAt:new Date().toISOString()})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"3px 8px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif"}}>
-                  {["pending","in_progress","done"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
-                </select>
-              </div>
-              <div style={{color:"#555",fontSize:11}}>{dfShort(t.dueDate)}</div>
-              <div style={{display:"flex",gap:5,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
-                {t.photos&&t.photos.length>0&&(
-                  <div style={{display:"flex",gap:2,marginRight:4}}>
-                    {t.photos.slice(0,2).map((ph,pi)=>ph.dataUrl
-                      ? <img key={pi} src={ph.dataUrl} alt="" style={{width:24,height:24,borderRadius:4,objectFit:"cover",border:"1px solid #333",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setViewPhoto(ph.dataUrl);}}/>
-                      : <div key={pi} style={{width:24,height:24,borderRadius:4,background:"#252540",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#555"}}>📷</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {groups.map(([uid,userTasks])=>{
+                const u=getUser(uid);
+                const rc=RC[u?.role]||"#666";
+                const isOpen=!!expandedUsers[uid];
+                const pending=userTasks.filter(t=>t.status==="pending").length;
+                const inprog=userTasks.filter(t=>t.status==="in_progress").length;
+                const done=userTasks.filter(t=>t.status==="done").length;
+                const allDone=pending===0&&inprog===0;
+                return(
+                  <div key={uid} style={{background:"#111128",border:`1px solid ${isOpen?rc+"44":"#1e1e38"}`,borderRadius:14,overflow:"hidden",transition:"border-color .15s"}}>
+                    {/* Staff row — click to expand */}
+                    <div onClick={()=>toggleUser(uid)} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",cursor:"pointer",background:isOpen?`${rc}08`:"transparent"}}
+                      onMouseEnter={e=>!isOpen&&(e.currentTarget.style.background="#0a0a1a")}
+                      onMouseLeave={e=>!isOpen&&(e.currentTarget.style.background="transparent")}>
+                      <Av name={u?.name||"?"} size={36} color={rc}/>
+                      <div style={{flex:1}}>
+                        <div style={{color:"#fff",fontSize:14,fontWeight:700}}>{u?.name||"Unassigned"}</div>
+                        <div style={{display:"flex",gap:10,marginTop:3}}>
+                          {pending>0&&<span style={{fontSize:10,color:"#f97316"}}>⏳ {pending} pending</span>}
+                          {inprog>0&&<span style={{fontSize:10,color:"#3b82f6"}}>▶ {inprog} in progress</span>}
+                          {done>0&&<span style={{fontSize:10,color:"#22c55e"}}>✓ {done} done</span>}
+                          {allDone&&<span style={{fontSize:10,color:"#22c55e",fontWeight:700}}>✓ All complete</span>}
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      <div style={{width:80,marginRight:8}}>
+                        <div style={{height:4,background:"#1e1e38",borderRadius:4,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${userTasks.length?done/userTasks.length*100:0}%`,background:allDone?"#22c55e":rc,borderRadius:4,transition:"width .3s"}}/>
+                        </div>
+                        <div style={{fontSize:9,color:"#555",textAlign:"right",marginTop:2}}>{userTasks.length} tasks</div>
+                      </div>
+                      <Badge label={RL[u?.role]||"—"} color={rc} sm/>
+                      <div style={{fontSize:18,color:isOpen?rc:"#555",transition:"transform .2s",transform:isOpen?"rotate(90deg)":"none",display:"inline-block",marginLeft:4}}>›</div>
+                    </div>
+
+                    {/* Task rows — shown when expanded */}
+                    {isOpen&&(
+                      <div style={{borderTop:`1px solid ${rc}22`}}>
+                        {/* Column headers */}
+                        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.8fr 1fr 110px",padding:"7px 16px",background:"#0a0a1a"}}>
+                          {["Task","Location","Priority","Status",""].map(h=>(
+                            <div key={h} style={{fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{h}</div>
+                          ))}
+                        </div>
+                        {userTasks.map(t=>{
+                          const pc=PC[t.priority]||"#6b7280",sc=SC[t.status]||"#6b7280";
+                          const prog=t.checklist?.length?Math.round(t.checklist.filter(c=>c.done).length/t.checklist.length*100):null;
+                          return(
+                            <div key={t.id} onClick={()=>setViewTask(t)}
+                              style={{display:"grid",gridTemplateColumns:"2fr 1fr 0.8fr 1fr 110px",padding:"10px 16px",borderTop:"1px solid #0a0a1a",alignItems:"center",cursor:"pointer"}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <div>
+                                <div style={{color:"#fff",fontSize:12,fontWeight:600}}>{typeEm[t.type]||"📋"} {t.roundId&&t.location?t.location:t.title}</div>
+                                {t.roundId&&<div style={{fontSize:9,color:"#a78bfa",marginTop:1}}>🔄 Round · Area {t.roundArea}/{t.roundTotal}</div>}
+                                {prog!==null&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                                  <div style={{width:50,height:3,background:"#1e1e38",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${prog}%`,background:rc,borderRadius:3}}/></div>
+                                  <span style={{fontSize:9,color:"#555"}}>{prog}%</span>
+                                </div>}
+                              </div>
+                              <div style={{color:"#888",fontSize:11}}>{t.location||"—"}</div>
+                              <div><Badge label={t.priority||"—"} color={pc} sm/></div>
+                              <div onClick={e=>e.stopPropagation()}>
+                                <select value={t.status} onChange={e=>onUpdate({...t,status:e.target.value,updatedAt:new Date().toISOString()})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"3px 8px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif"}}>
+                                  {["pending","in_progress","done"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
+                                </select>
+                              </div>
+                              <div style={{display:"flex",gap:5,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                                {t.photos&&t.photos.length>0&&<div style={{display:"flex",gap:2,marginRight:2}}>
+                                  {t.photos.slice(0,1).map((ph,pi)=>ph.dataUrl&&<img key={pi} src={ph.dataUrl} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setViewPhoto(ph.dataUrl);}}/>)}
+                                  {t.photos.length>1&&<div style={{width:22,height:22,borderRadius:4,background:"#252540",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#888"}}>+{t.photos.length-1}</div>}
+                                </div>}
+                                <button onClick={e=>{e.stopPropagation();setEditing(t);}} style={{background:"transparent",border:"1px solid #252540",borderRadius:7,padding:"3px 8px",color:"#aaa",cursor:"pointer",fontSize:10}}>Edit</button>
+                                <button onClick={e=>{e.stopPropagation();onDelete(t.id);}} style={{background:"transparent",border:"1px solid #ef444433",borderRadius:7,padding:"3px 8px",color:"#ef4444",cursor:"pointer",fontSize:10}}>✕</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                    {t.photos.length>2&&<div style={{width:24,height:24,borderRadius:4,background:"#252540",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#888"}}>+{t.photos.length-2}</div>}
                   </div>
-                )}
-                <button onClick={e=>{e.stopPropagation();setEditing(t);}} style={{background:"transparent",border:"1px solid #252540",borderRadius:7,padding:"4px 9px",color:"#aaa",cursor:"pointer",fontSize:11}}>Edit</button>
-                <button onClick={e=>{e.stopPropagation();onDelete(t.id);}} style={{background:"transparent",border:"1px solid #ef444433",borderRadius:7,padding:"4px 9px",color:"#ef4444",cursor:"pointer",fontSize:11}}>✕</button>
-              </div>
+                );
+              })}
             </div>
           );
-        })}
-      </div>
+        })()
+      }
       {/* Checkout photos section */}
       {checkouts&&checkouts.length>0&&(
         <div style={{marginTop:24}}>
