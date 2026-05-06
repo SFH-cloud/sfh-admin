@@ -2489,10 +2489,7 @@ export default function AdminPanel(){
           </div>
           <div style={{fontSize:9,color:"#333",marginBottom:6}}>Last: {lastSync||"—"}</div>
           <button onClick={loadAll} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>↻ Refresh</button>
-          <button onClick={async()=>{
-            const result=await sendPush(["u14"],{title:"🧪 SFH Test",body:"Push notification test for Khrystyna",tag:"test-push",url:"/"});
-            alert("Result: "+JSON.stringify(result)+"\n\nCheck browser console (F12) for HTTP status details.");
-          }} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #38bdf833",borderRadius:8,color:"#38bdf8",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>🧪 Test Push (Khrystyna)</button>
+
           <button onClick={async()=>{
             if(!confirm("Archive all completed tasks to Inspections? This will use yesterday's date as the shift date."))return;
             const prevDay=new Date(Date.now()-86400000).toISOString().slice(0,10);
