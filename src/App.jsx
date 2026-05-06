@@ -648,6 +648,8 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
     let html='<div class="section"><div class="section-title">Locations Cleaned</div>';
     locs.forEach(loc=>{
       const locTasks=dayTasks.filter(t=>t.location===loc);
+      // Also look for tasks with photos regardless of date (in case task was created earlier)
+      const locTasksWithPhotos=tasks.filter(t=>t.location===loc&&t.photos&&t.photos.filter(p=>p.type!=="start"&&p.dataUrl).length>0);
       const locCheckouts=dayCheckouts.filter(c=>c.location===loc);
       html+='<div class="loc-block"><div class="loc-name">&#128205; '+loc+'</div>';
       locTasks.forEach(t=>{
@@ -667,6 +669,22 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
           html+='</div>';
         }
       });
+      // Additional evidence photos from tasks not in today's filter
+      if(includePhotos){
+        const extraPhotos=locTasksWithPhotos
+          .filter(t=>!locTasks.find(lt=>lt.id===t.id))
+          .flatMap(t=>(t.photos||[]).filter(p=>p.type!=="start"&&p.dataUrl).map(p=>({...p,staffName:getUser(t.assigneeId)?.name||""})));
+        if(extraPhotos.length>0){
+          html+='<div style="margin-top:12px"><div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Task Photos</div>';
+          html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+          extraPhotos.slice(0,6).forEach(ph=>{
+            html+='<div style="text-align:center"><img src="'+ph.dataUrl+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #e8d99a;display:block;" alt="evidence"/>';
+            if(ph.staffName)html+='<div style="font-size:9px;color:#888;margin-top:2px">'+ph.staffName.split(" ")[0]+'</div>';
+            html+='</div>';
+          });
+          html+='</div></div>';
+        }
+      }
       if(includePhotos&&locCheckouts.length>0){
         html+='<div style="margin-top:12px"><div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Checkout Photos</div>';
         locCheckouts.forEach(c=>{
@@ -1470,7 +1488,7 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
 function LiveLocations({liveLocations,allUsers}){
   const active=allUsers.filter(u=>liveLocations[u.id]);
   const byLoc={};
-  active.forEach(u=>{const loc=liveLocations[u.id]?.location;if(loc){if(!byLoc[loc])byLoc[loc]=[];byLoc[loc].push({...u,...liveLocations[u.id]});}});
+  active.forEach(u=>{const loc=liveLocations[u.id]?.location||liveLocations[u.id]?.name;if(loc){if(!byLoc[loc])byLoc[loc]=[];byLoc[loc].push({...u,...liveLocations[u.id],name:u.name});}});
   const inactive=allUsers.filter(u=>!liveLocations[u.id]);
   return(
     <div>
