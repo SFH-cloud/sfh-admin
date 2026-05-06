@@ -1818,30 +1818,27 @@ function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
 
 
 // ═══════════════════════════════════════════════════════════
-// TIME REPORT PANEL — time spent per location per staff member
+// TIME REPORT PANEL
 // ═══════════════════════════════════════════════════════════
 function TimeReportPanel({tasks,allUsers}){
   const [date,setDate]=useState(tod());
-  const [expandedUsers,setExpandedUsers]=useState({});
-  const toggleUser=id=>setExpandedUsers(s=>({...s,[id]:!s[id]}));
+  const [viewMode,setViewMode]=useState("staff"); // staff | location
+  const [expandedKeys,setExpandedKeys]=useState({});
+  const [generating,setGenerating]=useState(false);
+  const toggleKey=k=>setExpandedKeys(s=>({...s,[k]:!s[k]}));
   const getUser=id=>allUsers.find(u=>u.id===id);
 
-  // Parse "HH:MM" time string into minutes since midnight
   const toMins=t=>{
     if(!t)return null;
-    const parts=t.split(":");
-    if(parts.length<2)return null;
-    return parseInt(parts[0])*60+parseInt(parts[1]);
+    const p=t.split(":");
+    if(p.length<2)return null;
+    return parseInt(p[0])*60+parseInt(p[1]);
   };
   const fmtDur=mins=>{
     if(mins===null||isNaN(mins)||mins<0)return "—";
     const h=Math.floor(mins/60),m=mins%60;
-    return h>0?`${h}h ${m}m`:`${m}m`;
+    return h>0?`${h}h ${m}m`:`${m}min`;
   };
-
-  // Build time data from tasks
-  // startTime comes from the start photo entry in task.photos
-  // endTime comes from task.updatedAt (when marked done)
   const buildTaskTime=t=>{
     const startEntry=(t.photos||[]).find(p=>p.type==="start");
     const startTime=startEntry?.time||t.startTime||null;
@@ -1850,127 +1847,283 @@ function TimeReportPanel({tasks,allUsers}){
       :null;
     const startMins=toMins(startTime);
     const endMins=toMins(endTime);
-    const durMins=(startMins!==null&&endMins!==null&&endMins>=startMins)
-      ?endMins-startMins:null;
+    const durMins=(startMins!==null&&endMins!==null&&endMins>=startMins)?endMins-startMins:null;
     return{startTime,endTime,durMins};
   };
 
-  // Filter tasks for selected date
   const dayTasks=tasks.filter(t=>{
     const created=(t.createdAt||"").slice(0,10);
     const updated=(t.updatedAt||"").slice(0,10);
     return created===date||updated===date;
   });
 
-  // Group by staff
-  const byUser={};
-  dayTasks.forEach(t=>{
-    const uid=t.assigneeId||"__unassigned__";
-    if(!byUser[uid])byUser[uid]=[];
-    byUser[uid].push(t);
-  });
-
-  // Sort by role then name
   const roleOrder={management:0,reception:1,porter:2,cleaner:3};
-  const groups=Object.entries(byUser).sort(([aId],[bId])=>{
+
+  // ── By Staff grouping ────────────────────────────────────────────────────
+  const byUser={};
+  dayTasks.forEach(t=>{const uid=t.assigneeId||"__";if(!byUser[uid])byUser[uid]=[];byUser[uid].push(t);});
+  const staffGroups=Object.entries(byUser).sort(([aId],[bId])=>{
     const au=getUser(aId),bu=getUser(bId);
     const ro=(roleOrder[au?.role]??9)-(roleOrder[bu?.role]??9);
     return ro!==0?ro:(au?.name||"").localeCompare(bu?.name||"");
   });
 
+  // ── By Location grouping ─────────────────────────────────────────────────
+  const byLoc={};
+  dayTasks.forEach(t=>{const l=t.location||"Unknown";if(!byLoc[l])byLoc[l]=[];byLoc[l].push(t);});
+  const locGroups=Object.entries(byLoc).sort(([a],[b])=>a.localeCompare(b));
+
+  // ── PDF Generator ────────────────────────────────────────────────────────
+  const generatePdf=()=>{
+    setGenerating(true);
+    setTimeout(()=>{
+      const w=window.open("","_blank");
+      if(!w){setGenerating(false);alert("Please allow popups");return;}
+      const dateLabel=new Date(date).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+      const css=[
+        "*{margin:0;padding:0;box-sizing:border-box;}",
+        "body{font-family:Helvetica Neue,Arial,sans-serif;color:#111;padding:36px;font-size:13px;}",
+        ".header{border-bottom:3px solid #c9a227;padding-bottom:18px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-start;}",
+        ".logo{font-size:24px;font-weight:900;} .logo span{color:#c9a227;}",
+        ".date-badge{background:#c9a227;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;}",
+        ".summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}",
+        ".stat{background:#f9f7f0;border:1px solid #e8d99a;border-radius:8px;padding:12px;text-align:center;}",
+        ".stat-val{font-size:26px;font-weight:900;color:#c9a227;} .stat-label{font-size:10px;text-transform:uppercase;color:#888;margin-top:3px;}",
+        ".section{margin-bottom:24px;}",
+        ".section-title{font-size:13px;font-weight:800;color:#c9a227;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e8d99a;}",
+        ".group{background:#f9f7f0;border:1px solid #e8d99a;border-radius:8px;margin-bottom:10px;overflow:hidden;}",
+        ".group-header{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;background:#fff;border-bottom:1px solid #e8d99a;}",
+        ".group-name{font-size:14px;font-weight:800;} .group-meta{font-size:11px;color:#888;}",
+        ".group-total{font-size:14px;font-weight:900;color:#c9a227;}",
+        "table{width:100%;border-collapse:collapse;}",
+        "th{background:#f0ead5;color:#888;font-size:9px;text-transform:uppercase;letter-spacing:1px;padding:6px 14px;text-align:left;font-weight:700;}",
+        "td{padding:8px 14px;border-bottom:1px solid #ece8d9;font-size:12px;}",
+        "tr:last-child td{border-bottom:none;}",
+        ".dur{font-weight:700;color:#c9a227;font-family:monospace;}",
+        ".status-done{color:#22c55e;font-weight:700;} .status-pending{color:#f97316;}",
+        ".footer{margin-top:32px;padding-top:12px;border-top:1px solid #e8d99a;display:flex;justify-content:space-between;font-size:10px;color:#aaa;}",
+        "@media print{body{padding:16px;}@page{margin:8mm;}}",
+      ].join("");
+
+      // Totals
+      const totalDone=dayTasks.filter(t=>t.status==="done").length;
+      const totalMins=dayTasks.reduce((s,t)=>{const{durMins}=buildTaskTime(t);return s+(durMins||0);},0);
+      const uniqueStaff=new Set(dayTasks.map(t=>t.assigneeId)).size;
+
+      let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SFH Time Report</title><style>${css}</style></head><body>`;
+      html+=`<div class="header"><div><div class="logo">Soho <span>House</span></div><div style="font-size:12px;color:#888;margin-top:3px">Operations Time Report</div></div><div style="text-align:right"><div class="date-badge">${dateLabel}</div><div style="font-size:10px;color:#aaa;margin-top:5px">Generated ${new Date().toLocaleString("en-GB")}</div></div></div>`;
+      html+=`<div class="summary"><div class="stat"><div class="stat-val">${totalDone}</div><div class="stat-label">Tasks Completed</div></div><div class="stat"><div class="stat-val">${fmtDur(totalMins)}</div><div class="stat-label">Total Time</div></div><div class="stat"><div class="stat-val">${uniqueStaff}</div><div class="stat-label">Staff Active</div></div></div>`;
+
+      // ── By Staff section ──
+      html+=`<div class="section"><div class="section-title">By Staff Member</div>`;
+      staffGroups.forEach(([uid,userTasks])=>{
+        const u=getUser(uid);
+        const uTotal=userTasks.reduce((s,t)=>{const{durMins}=buildTaskTime(t);return s+(durMins||0);},0);
+        const uDone=userTasks.filter(t=>t.status==="done").length;
+        html+=`<div class="group"><div class="group-header"><div><div class="group-name">${u?.name||"Unassigned"}</div><div class="group-meta">${RL[u?.role]||""} · ${uDone}/${userTasks.length} tasks</div></div><div class="group-total">${fmtDur(uTotal)}</div></div>`;
+        html+=`<table><tr><th>Location</th><th>Start</th><th>Finish</th><th>Duration</th><th>Status</th></tr>`;
+        userTasks.forEach(t=>{
+          const{startTime,endTime,durMins}=buildTaskTime(t);
+          const name=t.roundId&&t.location?t.location:t.title;
+          const sc=t.status==="done"?"status-done":"status-pending";
+          html+=`<tr><td>${name}</td><td style="font-family:monospace">${startTime||"—"}</td><td style="font-family:monospace">${endTime||"—"}</td><td class="dur">${fmtDur(durMins)}</td><td class="${sc}">${t.status.replace("_"," ")}</td></tr>`;
+        });
+        html+=`</table></div>`;
+      });
+      html+=`</div>`;
+
+      // ── By Location section ──
+      html+=`<div class="section"><div class="section-title">By Location</div>`;
+      locGroups.forEach(([loc,locTasks])=>{
+        const lTotal=locTasks.reduce((s,t)=>{const{durMins}=buildTaskTime(t);return s+(durMins||0);},0);
+        html+=`<div class="group"><div class="group-header"><div><div class="group-name">📍 ${loc}</div><div class="group-meta">${locTasks.length} tasks</div></div><div class="group-total">${fmtDur(lTotal)}</div></div>`;
+        html+=`<table><tr><th>Staff</th><th>Task</th><th>Start</th><th>Finish</th><th>Duration</th><th>Status</th></tr>`;
+        locTasks.forEach(t=>{
+          const u=getUser(t.assigneeId);
+          const{startTime,endTime,durMins}=buildTaskTime(t);
+          const name=t.roundId&&t.location?t.location:t.title;
+          const sc=t.status==="done"?"status-done":"status-pending";
+          html+=`<tr><td>${u?.name?.split(" ")[0]||"—"}</td><td>${name}</td><td style="font-family:monospace">${startTime||"—"}</td><td style="font-family:monospace">${endTime||"—"}</td><td class="dur">${fmtDur(durMins)}</td><td class="${sc}">${t.status.replace("_"," ")}</td></tr>`;
+        });
+        html+=`</table></div>`;
+      });
+      html+=`</div>`;
+
+      html+=`<div class="footer"><span>Soho House Operations Platform</span><span>Confidential — Management use only</span></div></body></html>`;
+      w.document.write(html);w.document.close();
+      setTimeout(()=>{w.print();setGenerating(false);},500);
+    },100);
+  };
+
+  // ── Shared row renderer ──────────────────────────────────────────────────
+  const renderRow=(t,showStaff=false)=>{
+    const u=showStaff?getUser(t.assigneeId):null;
+    const{startTime,endTime,durMins}=buildTaskTime(t);
+    const sc=SC[t.status]||"#6b7280";
+    const displayName=t.roundId&&t.location?t.location:t.title;
+    return(
+      <div key={t.id} style={{display:"grid",gridTemplateColumns:showStaff?"1.5fr 1.5fr 0.7fr 0.7fr 0.7fr 0.8fr":"2fr 0.8fr 0.8fr 0.8fr 0.8fr",padding:"10px 18px",borderTop:"1px solid #0a0a1a",alignItems:"center"}}
+        onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
+        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+        {showStaff&&<div style={{fontSize:11,color:"#aaa",display:"flex",alignItems:"center",gap:6}}>
+          {u&&<Av name={u.name} size={20} color={RC[u.role]||"#666"}/>}
+          <span>{u?.name?.split(" ")[0]||"—"}</span>
+        </div>}
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:"#fff"}}>{displayName}</div>
+          {t.roundId&&<div style={{fontSize:9,color:"#a78bfa"}}>🔄 {t.roundArea}/{t.roundTotal}</div>}
+        </div>
+        <div style={{fontSize:12,color:startTime?"#aaa":"#2a2a4a",fontFamily:"monospace"}}>{startTime||"—"}</div>
+        <div style={{fontSize:12,color:endTime?"#aaa":"#2a2a4a",fontFamily:"monospace"}}>{endTime||"—"}</div>
+        <div style={{fontSize:12,color:durMins!==null?"#d4a843":"#2a2a4a",fontWeight:durMins?700:400}}>{fmtDur(durMins)}</div>
+        <div><Badge label={t.status.replace("_"," ")} color={sc} sm/></div>
+      </div>
+    );
+  };
+
+  const colHeaders=(showStaff)=>(
+    <div style={{display:"grid",gridTemplateColumns:showStaff?"1.5fr 1.5fr 0.7fr 0.7fr 0.7fr 0.8fr":"2fr 0.8fr 0.8fr 0.8fr 0.8fr",padding:"7px 18px",background:"#0a0a1a"}}>
+      {(showStaff?["Staff","Location","Start","Finish","Duration","Status"]:["Location","Start","Finish","Duration","Status"]).map(h=>(
+        <div key={h} style={{fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{h}</div>
+      ))}
+    </div>
+  );
+
   return(
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
         <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>⏱ Time Report</div>
+        <button onClick={generatePdf} disabled={generating||dayTasks.length===0}
+          style={{padding:"10px 18px",background:generating||dayTasks.length===0?"#252540":"#d4a843",border:"none",borderRadius:10,color:generating||dayTasks.length===0?"#555":"#000",fontWeight:700,fontSize:12,cursor:generating||dayTasks.length===0?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:8}}>
+          {generating?"⏳ Generating…":"📄 Export PDF"}
+        </button>
       </div>
-      <div style={{fontSize:13,color:"#555",marginBottom:20}}>Time spent per staff member per location — based on task start and completion times</div>
+      <div style={{fontSize:13,color:"#555",marginBottom:20}}>Time spent per staff member per location</div>
 
-      <div style={{marginBottom:20}}>
-        <label style={L}>Report Date</label>
-        <input type="date" style={{...I,maxWidth:200}} value={date} onChange={e=>setDate(e.target.value)}/>
+      {/* Controls */}
+      <div style={{display:"flex",gap:16,marginBottom:20,alignItems:"flex-end",flexWrap:"wrap"}}>
+        <div>
+          <label style={L}>Date</label>
+          <input type="date" style={{...I,width:180}} value={date} onChange={e=>{setDate(e.target.value);setExpandedKeys({});}}/>
+        </div>
+        <div>
+          <label style={L}>Group by</label>
+          <div style={{display:"flex",gap:6}}>
+            {[["staff","👤 Staff"],["location","📍 Location"]].map(([v,l])=>(
+              <button key={v} onClick={()=>{setViewMode(v);setExpandedKeys({});}}
+                style={{padding:"9px 16px",borderRadius:10,background:viewMode===v?"#d4a84322":"transparent",border:`1px solid ${viewMode===v?"#d4a843":"#252540"}`,color:viewMode===v?"#d4a843":"#555",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {groups.length===0&&(
+      {/* Summary stats */}
+      {dayTasks.length>0&&(()=>{
+        const totalDone=dayTasks.filter(t=>t.status==="done").length;
+        const totalMins=dayTasks.reduce((s,t)=>{const{durMins}=buildTaskTime(t);return s+(durMins||0);},0);
+        return(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+            {[{l:"Tasks Done",v:totalDone+"/"+dayTasks.length,c:"#22c55e"},{l:"Total Time",v:fmtDur(totalMins),c:"#d4a843"},{l:"Staff Active",v:new Set(dayTasks.map(t=>t.assigneeId)).size,c:"#a78bfa"}].map(s=>(
+              <div key={s.l} style={{background:"#111128",border:`1px solid ${s.c}22`,borderRadius:12,padding:"14px",textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:900,color:s.c,fontFamily:"Georgia,serif"}}>{s.v}</div>
+                <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginTop:3}}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {dayTasks.length===0&&(
         <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"48px",textAlign:"center",color:"#555"}}>
-          No task activity recorded for {new Date(date).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}
+          No activity for {new Date(date).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}
         </div>
       )}
 
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {groups.map(([uid,userTasks])=>{
-          const u=getUser(uid);
-          const color=RC[u?.role]||"#666";
-          const isOpen=!!expandedUsers[uid];
-
-          // Calculate total time for this user
-          const totalMins=userTasks.reduce((sum,t)=>{
-            const {durMins}=buildTaskTime(t);
-            return sum+(durMins||0);
-          },0);
-          const doneCount=userTasks.filter(t=>t.status==="done").length;
-
-          return(
-            <div key={uid} style={{background:"#111128",border:`1px solid ${isOpen?color+"44":"#1e1e38"}`,borderRadius:14,overflow:"hidden"}}>
-              {/* Staff header */}
-              <div onClick={()=>toggleUser(uid)} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",cursor:"pointer",background:isOpen?`${color}08`:"transparent"}}
-                onMouseEnter={e=>!isOpen&&(e.currentTarget.style.background="#0a0a1a")}
-                onMouseLeave={e=>!isOpen&&(e.currentTarget.style.background="transparent")}>
-                <Av name={u?.name||"?"} size={38} color={color}/>
-                <div style={{flex:1}}>
-                  <div style={{color:"#fff",fontSize:14,fontWeight:700}}>{u?.name||"Unassigned"}</div>
-                  <div style={{display:"flex",gap:12,marginTop:3}}>
-                    <span style={{fontSize:11,color:color}}>{doneCount}/{userTasks.length} tasks done</span>
-                    {totalMins>0&&<span style={{fontSize:11,color:"#d4a843",fontWeight:700}}>⏱ {fmtDur(totalMins)} total</span>}
+      {/* ── By Staff ── */}
+      {viewMode==="staff"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {staffGroups.map(([uid,userTasks])=>{
+            const u=getUser(uid);
+            const color=RC[u?.role]||"#666";
+            const isOpen=!!expandedKeys[uid];
+            const totalMins=userTasks.reduce((s,t)=>{const{durMins}=buildTaskTime(t);return s+(durMins||0);},0);
+            const doneCount=userTasks.filter(t=>t.status==="done").length;
+            return(
+              <div key={uid} style={{background:"#111128",border:`1px solid ${isOpen?color+"44":"#1e1e38"}`,borderRadius:14,overflow:"hidden"}}>
+                <div onClick={()=>toggleKey(uid)} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",cursor:"pointer",background:isOpen?`${color}08`:"transparent"}}
+                  onMouseEnter={e=>!isOpen&&(e.currentTarget.style.background="#0a0a1a")}
+                  onMouseLeave={e=>!isOpen&&(e.currentTarget.style.background="transparent")}>
+                  <Av name={u?.name||"?"} size={38} color={color}/>
+                  <div style={{flex:1}}>
+                    <div style={{color:"#fff",fontSize:14,fontWeight:700}}>{u?.name||"Unassigned"}</div>
+                    <div style={{display:"flex",gap:12,marginTop:3}}>
+                      <span style={{fontSize:11,color:color}}>{doneCount}/{userTasks.length} tasks</span>
+                      {totalMins>0&&<span style={{fontSize:11,color:"#d4a843",fontWeight:700}}>⏱ {fmtDur(totalMins)}</span>}
+                    </div>
                   </div>
+                  <Badge label={RL[u?.role]||"—"} color={color} sm/>
+                  <div style={{fontSize:18,color:isOpen?color:"#555",transform:isOpen?"rotate(90deg)":"none",transition:"transform .2s",display:"inline-block",marginLeft:4}}>›</div>
                 </div>
-                <Badge label={RL[u?.role]||"—"} color={color} sm/>
-                <div style={{fontSize:18,color:isOpen?color:"#555",transform:isOpen?"rotate(90deg)":"none",transition:"transform .2s",display:"inline-block",marginLeft:4}}>›</div>
-              </div>
-
-              {/* Location rows */}
-              {isOpen&&(
-                <div style={{borderTop:`1px solid ${color}22`}}>
-                  {/* Table header */}
-                  <div style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 1fr",padding:"8px 18px",background:"#0a0a1a"}}>
-                    {["Location","Start","Finish","Duration","Status"].map(h=>(
-                      <div key={h} style={{fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{h}</div>
-                    ))}
-                  </div>
-                  {userTasks.map(t=>{
-                    const {startTime,endTime,durMins}=buildTaskTime(t);
-                    const sc=SC[t.status]||"#666";
-                    const displayName=t.roundId&&t.location?t.location:t.title;
-                    return(
-                      <div key={t.id} style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 1fr",padding:"11px 18px",borderTop:"1px solid #0a0a1a",alignItems:"center"}}
-                        onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <div>
-                          <div style={{fontSize:12,fontWeight:600,color:"#fff"}}>{displayName}</div>
-                          {t.roundId&&<div style={{fontSize:9,color:"#a78bfa"}}>🔄 {t.roundArea}/{t.roundTotal}</div>}
-                        </div>
-                        <div style={{fontSize:12,color:startTime?"#aaa":"#333",fontFamily:"monospace"}}>{startTime||"—"}</div>
-                        <div style={{fontSize:12,color:endTime?"#aaa":"#333",fontFamily:"monospace"}}>{endTime||"—"}</div>
-                        <div style={{fontSize:12,color:durMins!==null?"#d4a843":"#333",fontWeight:durMins?700:400}}>{fmtDur(durMins)}</div>
-                        <div><Badge label={t.status.replace("_"," ")} color={sc} sm/></div>
-                      </div>
-                    );
-                  })}
-                  {/* User total row */}
-                  <div style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 1fr",padding:"10px 18px",background:`${color}10`,borderTop:`1px solid ${color}33`}}>
-                    <div style={{fontSize:11,fontWeight:700,color:color}}>Total</div>
+                {isOpen&&(<div style={{borderTop:`1px solid ${color}22`}}>
+                  {colHeaders(false)}
+                  {userTasks.map(t=>renderRow(t,false))}
+                  <div style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 0.8fr",padding:"10px 18px",background:`${color}10`,borderTop:`1px solid ${color}33`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:color}}>TOTAL</div>
                     <div/><div/>
-                    <div style={{fontSize:13,fontWeight:900,color:"#d4a843",fontFamily:"monospace"}}>{fmtDur(totalMins)}</div>
-                    <div style={{fontSize:11,color:"#555"}}>{doneCount} completed</div>
+                    <div style={{fontSize:14,fontWeight:900,color:"#d4a843",fontFamily:"monospace"}}>{fmtDur(totalMins)}</div>
+                    <div style={{fontSize:11,color:"#555"}}>{doneCount} done</div>
                   </div>
+                </div>)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── By Location ── */}
+      {viewMode==="location"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {locGroups.map(([loc,locTasks])=>{
+            const isOpen=!!expandedKeys[loc];
+            const totalMins=locTasks.reduce((s,t)=>{const{durMins}=buildTaskTime(t);return s+(durMins||0);},0);
+            const doneCount=locTasks.filter(t=>t.status==="done").length;
+            return(
+              <div key={loc} style={{background:"#111128",border:`1px solid ${isOpen?"#38bdf844":"#1e1e38"}`,borderRadius:14,overflow:"hidden"}}>
+                <div onClick={()=>toggleKey(loc)} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",cursor:"pointer",background:isOpen?"#38bdf808":"transparent"}}
+                  onMouseEnter={e=>!isOpen&&(e.currentTarget.style.background="#0a0a1a")}
+                  onMouseLeave={e=>!isOpen&&(e.currentTarget.style.background="transparent")}>
+                  <div style={{width:38,height:38,borderRadius:10,background:"#38bdf822",border:"1px solid #38bdf844",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📍</div>
+                  <div style={{flex:1}}>
+                    <div style={{color:"#fff",fontSize:14,fontWeight:700}}>{loc}</div>
+                    <div style={{display:"flex",gap:12,marginTop:3}}>
+                      <span style={{fontSize:11,color:"#38bdf8"}}>{doneCount}/{locTasks.length} tasks · {new Set(locTasks.map(t=>t.assigneeId)).size} staff</span>
+                      {totalMins>0&&<span style={{fontSize:11,color:"#d4a843",fontWeight:700}}>⏱ {fmtDur(totalMins)}</span>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:18,color:isOpen?"#38bdf8":"#555",transform:isOpen?"rotate(90deg)":"none",transition:"transform .2s",display:"inline-block"}}>›</div>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                {isOpen&&(<div style={{borderTop:"1px solid #38bdf822"}}>
+                  {colHeaders(true)}
+                  {locTasks.map(t=>renderRow(t,true))}
+                  <div style={{display:"grid",gridTemplateColumns:"1.5fr 1.5fr 0.7fr 0.7fr 0.7fr 0.8fr",padding:"10px 18px",background:"#38bdf810",borderTop:"1px solid #38bdf833"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>TOTAL</div>
+                    <div/><div/><div/>
+                    <div style={{fontSize:14,fontWeight:900,color:"#d4a843",fontFamily:"monospace"}}>{fmtDur(totalMins)}</div>
+                    <div style={{fontSize:11,color:"#555"}}>{doneCount} done</div>
+                  </div>
+                </div>)}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // ROOT ADMIN APP
@@ -2100,12 +2253,12 @@ export default function AdminPanel(){
     {id:"tasks",         l:"Tasks",          e:"✓",  badge:pendCount},
     {id:"locations_live",l:"Live Locations", e:"📡", badge:locCount},
     {id:"report",        l:"Daily Report",   e:"📄"},
+    {id:"time_report",   l:"Time Report",    e:"⏱"},
     {id:"staff",         l:"Staff",          e:"👤"},
     {id:"repairs",       l:"Repairs",        e:"🔧", badge:repCount},
     {id:"orders",        l:"Supplies",       e:"🛒", badge:ordCount},
     {id:"inspections",   l:"Inspections",    e:"⭐"},
     {id:"rounds",        l:"Rounds",         e:"🔄"},
-    {id:"time_report",   l:"Time Report",    e:"⏱"},
   ];
 
   if(loading)return <div style={{minHeight:"100vh",background:"#070714",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#d4a843",fontFamily:"Georgia,serif",fontSize:26}}>SFH Admin</div></div>;
