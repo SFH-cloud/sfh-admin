@@ -184,7 +184,7 @@ const SK = {
 };
 
 // ─── Push notification helper ────────────────────────────────────────────────
-const EDGE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co/functions/v1/push-notify";
+const EDGE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co/functions/v1/sfh-push";
 
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZmhiY2N5ZGFsdGVicG5mcXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MzAyOTIsImV4cCI6MjA5MzUwNjI5Mn0.uY4dwnTFqs1F43SMc9JChEta5PfQu4202LZ5owQ6Prc';
 
