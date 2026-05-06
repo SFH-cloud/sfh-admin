@@ -204,7 +204,8 @@ const sendPush = async (userIds, notification) => {
     });
     const data = await res.json().catch(()=>({raw:res.status}));
     console.log('Push result:', JSON.stringify(data));
-  } catch(e) { console.log('Push failed:', e); }
+    return data;
+  } catch(e) { console.log('Push failed:', e); return {error:String(e)}; }
 };
 
 
@@ -2485,6 +2486,14 @@ export default function AdminPanel(){
           </div>
           <div style={{fontSize:9,color:"#333",marginBottom:6}}>Last: {lastSync||"—"}</div>
           <button onClick={loadAll} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #252540",borderRadius:8,color:"#555",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>↻ Refresh</button>
+          <button onClick={async()=>{
+            const result=await sendPush(["u14"],{title:"🧪 Test Push",body:"Push notifications are working!",tag:"test-push",url:"/"});
+            // Check log after 2s
+            setTimeout(async()=>{
+              const log=await stor.get("sh5_push_log_last");
+              alert("Push sent! Check admin console for Apple response. Result: "+JSON.stringify(result));
+            },2000);
+          }} style={{width:"100%",padding:"6px",background:"transparent",border:"1px solid #38bdf833",borderRadius:8,color:"#38bdf8",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>🧪 Test Push (Khrystyna)</button>
           <button onClick={async()=>{
             if(!confirm("Archive all completed tasks to Inspections? This will use yesterday's date as the shift date."))return;
             const prevDay=new Date(Date.now()-86400000).toISOString().slice(0,10);
