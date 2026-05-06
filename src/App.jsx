@@ -180,7 +180,7 @@ const SK = {
   inspections:"sh5_inspections", profiles:"sh5_profiles",
   checkouts:"sh5_checkouts", locPrefix:"sh5_loc:",
   adminSess:"sh5_admin_session", pins:"sh5_pins",
-  rounds:"sh5_rounds",
+  rounds:"sh5_rounds", weekly:"sh5_weekly_plans",
 };
 
 // ─── Push notification helper ────────────────────────────────────────────────
@@ -2284,6 +2284,436 @@ function TimeReportPanel({tasks,allUsers}){
 }
 
 
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY PLAN PANEL
+// ═══════════════════════════════════════════════════════════
+const WEEK_DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const WEEK_DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
+  const [view,setView]=useState("list"); // list | edit | schedule
+  const [editPlan,setEditPlan]=useState(null);
+  const [saving,setSaving]=useState(false);
+
+  const todayDow = new Date().getDay(); // 0=Sun,1=Mon...
+  const todayName = WEEK_DAYS[(todayDow+6)%7]; // convert to Mon=0
+
+  const createNewPlan=()=>{
+    setEditPlan({
+      id:"wp_"+Date.now(),
+      name:"New Weekly Plan",
+      slots: WEEK_DAYS.map(day=>({day, entries:[]})),
+      scheduleTime:"07:00",
+      active:false,
+      lastDispatched:null,
+      createdAt:new Date().toISOString(),
+    });
+    setView("edit");
+  };
+
+  const savePlan=async(plan)=>{
+    setSaving(true);
+    const updated=weeklyPlans.find(p=>p.id===plan.id)
+      ?weeklyPlans.map(p=>p.id===plan.id?plan:p)
+      :[...weeklyPlans,plan];
+    await onSave(updated);
+    setSaving(false);
+    setView("list");
+    setEditPlan(null);
+  };
+
+  const deletePlan=async(id)=>{
+    if(!confirm("Delete this plan?"))return;
+    await onSave(weeklyPlans.filter(p=>p.id!==id));
+  };
+
+  const toggleActive=async(plan)=>{
+    const updated=weeklyPlans.map(p=>p.id===plan.id?{...p,active:!p.active}:p);
+    await onSave(updated);
+  };
+
+  // Dispatch today's tasks from a plan
+  const dispatchDay=async(plan,dayName)=>{
+    const slot=plan.slots.find(s=>s.day===dayName);
+    if(!slot||!slot.entries.length){alert("No tasks defined for "+dayName);return;}
+    const now=new Date().toISOString();
+    const dueDate=new Date().toISOString().slice(0,10);
+    const newTasks=[];
+    slot.entries.forEach(entry=>{
+      if(entry.roundId){
+        // Dispatch a round — creates one task per area
+        const round=rounds.find(r=>r.id===entry.roundId);
+        if(round){
+          round.areas.forEach((area,idx)=>{
+            newTasks.push({
+              id:uid(),title:`${round.name} — ${area}`,
+              type:round.dept==="porter"?"porter":"checklist",
+              priority:entry.priority||"medium",
+              location:area,assigneeId:entry.assigneeId,
+              notes:`Weekly Plan: ${plan.name} | ${dayName} | Round: ${round.name}`,
+              checklist:round.tasks.map(t=>({label:t,done:false})),
+              status:"pending",photos:[],createdAt:now,dueDate,
+              roundId:round.id,roundArea:idx+1,roundTotal:round.areas.length,
+              weeklyPlanId:plan.id,
+            });
+          });
+        }
+      } else {
+        // Single task
+        newTasks.push({
+          id:uid(),title:entry.title,
+          type:"checklist",priority:entry.priority||"medium",
+          location:entry.location,assigneeId:entry.assigneeId,
+          notes:`Weekly Plan: ${plan.name} | ${dayName}`,
+          checklist:(entry.tasks||[]).map(t=>({label:t,done:false})),
+          status:"pending",photos:[],createdAt:now,dueDate,
+          weeklyPlanId:plan.id,
+        });
+      }
+    });
+    if(!newTasks.length){alert("No tasks to dispatch");return;}
+    if(!confirm(`Dispatch ${newTasks.length} tasks for ${dayName}?`))return;
+    await onDispatch(newTasks);
+    // Update lastDispatched
+    const updated=weeklyPlans.map(p=>p.id===plan.id?{...p,lastDispatched:{day:dayName,at:now}}:p);
+    await onSave(updated);
+    alert(`✓ ${newTasks.length} tasks dispatched for ${dayName}`);
+  };
+
+  // Auto-dispatch check — runs on load, checks if any active plan needs dispatch today
+  useEffect(()=>{
+    const check=async()=>{
+      const now=new Date();
+      const dayName=WEEK_DAYS[(now.getDay()+6)%7];
+      const timeStr=now.toTimeString().slice(0,5); // HH:MM
+      weeklyPlans.forEach(async plan=>{
+        if(!plan.active)return;
+        if(plan.scheduleTime!==timeStr)return;
+        // Check if already dispatched today
+        const lastDate=(plan.lastDispatched?.at||"").slice(0,10);
+        const today=now.toISOString().slice(0,10);
+        if(lastDate===today)return;
+        // Auto-dispatch
+        const slot=plan.slots.find(s=>s.day===dayName);
+        if(!slot||!slot.entries.length)return;
+        console.log("Auto-dispatching weekly plan:",plan.name,"for",dayName);
+        await dispatchDay(plan,dayName);
+      });
+    };
+    const iv=setInterval(check,60000);
+    check();
+    return()=>clearInterval(iv);
+  },[weeklyPlans]);
+
+  if(view==="edit"&&editPlan) return <WeeklyPlanEditor plan={editPlan} allUsers={allUsers} rounds={rounds} onSave={savePlan} onCancel={()=>{setView("list");setEditPlan(null);}} saving={saving}/>;
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>📅 Weekly Plans</div>
+        <button onClick={createNewPlan} style={{padding:"10px 20px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}>+ New Plan</button>
+      </div>
+      <div style={{fontSize:13,color:"#555",marginBottom:20}}>Create weekly schedules that automatically dispatch tasks at a set time each day</div>
+
+      {weeklyPlans.length===0&&(
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"60px",textAlign:"center",color:"#555"}}>
+          <div style={{fontSize:40,marginBottom:12}}>📅</div>
+          <div style={{fontSize:15,fontWeight:700,color:"#666",marginBottom:8}}>No weekly plans yet</div>
+          <div style={{fontSize:13}}>Create a plan to automatically assign tasks each day of the week</div>
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {weeklyPlans.map(plan=>{
+          const todaySlot=plan.slots.find(s=>s.day===todayName);
+          const todayCount=todaySlot?.entries?.length||0;
+          const totalEntries=plan.slots.reduce((n,s)=>n+(s.entries?.length||0),0);
+          const lastD=plan.lastDispatched;
+          return(
+            <div key={plan.id} style={{background:"#111128",border:`1px solid ${plan.active?"#22c55e44":"#1e1e38"}`,borderRadius:16,padding:"20px"}}>
+              {/* Header */}
+              <div style={{display:"flex",alignItems:"flex-start",gap:14,marginBottom:16}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                    <div style={{fontSize:16,fontWeight:800,color:"#fff"}}>{plan.name}</div>
+                    {plan.active
+                      ?<span style={{background:"#22c55e22",border:"1px solid #22c55e44",borderRadius:6,padding:"2px 10px",fontSize:10,color:"#22c55e",fontWeight:700}}>ACTIVE</span>
+                      :<span style={{background:"#55555522",border:"1px solid #55555544",borderRadius:6,padding:"2px 10px",fontSize:10,color:"#555",fontWeight:700}}>INACTIVE</span>
+                    }
+                  </div>
+                  <div style={{display:"flex",gap:14,fontSize:11,color:"#555"}}>
+                    <span>⏰ Auto-dispatch at {plan.scheduleTime}</span>
+                    <span>📋 {totalEntries} schedule entries</span>
+                    {lastD&&<span>Last: {new Date(lastD.at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})} ({lastD.day})</span>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,flexShrink:0}}>
+                  <button onClick={()=>toggleActive(plan)}
+                    style={{padding:"7px 14px",background:plan.active?"#ef444422":"#22c55e22",border:`1px solid ${plan.active?"#ef444444":"#22c55e44"}`,borderRadius:8,color:plan.active?"#ef4444":"#22c55e",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                    {plan.active?"Deactivate":"Activate"}
+                  </button>
+                  <button onClick={()=>{setEditPlan({...plan,slots:plan.slots.map(s=>({...s,entries:[...s.entries]}))});setView("edit");}}
+                    style={{padding:"7px 12px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                    ✏️ Edit
+                  </button>
+                  <button onClick={()=>deletePlan(plan.id)}
+                    style={{padding:"7px 10px",background:"transparent",border:"1px solid #ef444433",borderRadius:8,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>✕</button>
+                </div>
+              </div>
+
+              {/* Day overview grid */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,marginBottom:14}}>
+                {WEEK_DAYS.map((day,i)=>{
+                  const slot=plan.slots.find(s=>s.day===day);
+                  const count=slot?.entries?.length||0;
+                  const isToday=day===todayName;
+                  return(
+                    <div key={day} style={{background:isToday?"#d4a84315":"#0a0a1a",border:`1px solid ${isToday?"#d4a84344":"#1e1e38"}`,borderRadius:8,padding:"6px 4px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:isToday?"#d4a843":"#555",fontWeight:700,textTransform:"uppercase",marginBottom:3}}>{WEEK_DAYS_SHORT[i]}</div>
+                      <div style={{fontSize:16,fontWeight:900,color:count>0?(isToday?"#d4a843":"#aaa"):"#2a2a4a"}}>{count>0?count:"—"}</div>
+                      {count>0&&<div style={{fontSize:8,color:"#555"}}>entries</div>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Manual dispatch buttons */}
+              <div style={{borderTop:"1px solid #1e1e38",paddingTop:12}}>
+                <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8,fontWeight:700}}>Manual Dispatch</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {WEEK_DAYS.map(day=>{
+                    const slot=plan.slots.find(s=>s.day===day);
+                    const count=slot?.entries?.length||0;
+                    const isToday=day===todayName;
+                    return count>0?(
+                      <button key={day} onClick={()=>dispatchDay(plan,day)}
+                        style={{padding:"5px 12px",borderRadius:8,background:isToday?"#d4a84322":"transparent",border:`1px solid ${isToday?"#d4a843":"#252540"}`,color:isToday?"#d4a843":"#666",fontSize:11,fontWeight:isToday?700:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                        {isToday?"▶ ":""}{day.slice(0,3)} ({count})
+                      </button>
+                    ):null;
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Weekly Plan Editor ────────────────────────────────────────────────────────
+function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}){
+  const [plan,setPlan]=useState(initPlan);
+  const [activeDay,setActiveDay]=useState(0); // 0=Monday
+  const set=(k,v)=>setPlan(p=>({...p,[k]:v}));
+
+  const currentSlot=plan.slots[activeDay];
+
+  const updateSlot=(dayIdx,entries)=>{
+    setPlan(p=>({...p,slots:p.slots.map((s,i)=>i===dayIdx?{...s,entries}:s)}));
+  };
+
+  const addEntry=(type)=>{
+    const entry=type==="round"
+      ?{id:uid(),type:"round",roundId:"",assigneeId:"",priority:"medium"}
+      :{id:uid(),type:"task",title:"",location:"",assigneeId:"",priority:"medium",tasks:[]};
+    updateSlot(activeDay,[...currentSlot.entries,entry]);
+  };
+
+  const updateEntry=(entryId,changes)=>{
+    updateSlot(activeDay,currentSlot.entries.map(e=>e.id===entryId?{...e,...changes}:e));
+  };
+
+  const removeEntry=(entryId)=>{
+    updateSlot(activeDay,currentSlot.entries.filter(e=>e.id!==entryId));
+  };
+
+  // Copy a day to another day
+  const copyDay=(fromIdx,toIdx)=>{
+    const copied=plan.slots[fromIdx].entries.map(e=>({...e,id:uid()}));
+    updateSlot(toIdx,copied);
+  };
+
+  const roleOrder={management:0,reception:1,porter:2,cleaner:3};
+  const sortedUsers=[...allUsers].sort((a,b)=>(roleOrder[a.role]??9)-(roleOrder[b.role]??9)||a.name.localeCompare(b.name));
+
+  const IS={background:"#0d0d1e",border:"1px solid #252540",borderRadius:8,padding:"8px 11px",color:"#fff",fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"};
+
+  return(
+    <div style={{paddingBottom:40}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div>
+          <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>
+            {initPlan.name==="New Weekly Plan"?"New Weekly Plan":"Edit: "+plan.name}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onCancel} style={{padding:"10px 16px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
+          <button onClick={()=>onSave(plan)} disabled={saving}
+            style={{padding:"10px 20px",background:saving?"#333":"#d4a843",border:"none",borderRadius:10,color:saving?"#666":"#000",fontWeight:700,fontSize:13,cursor:saving?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+            {saving?"Saving…":"💾 Save Plan"}
+          </button>
+        </div>
+      </div>
+
+      {/* Plan settings */}
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:14,padding:"16px",marginBottom:16,display:"grid",gridTemplateColumns:"1fr auto auto",gap:12,alignItems:"end"}}>
+        <div>
+          <label style={L}>Plan Name</label>
+          <input style={IS} value={plan.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Standard Weekly Rota"/>
+        </div>
+        <div>
+          <label style={L}>Auto-dispatch Time</label>
+          <input type="time" style={{...IS,width:120}} value={plan.scheduleTime} onChange={e=>set("scheduleTime",e.target.value)}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:2}}>
+          <input type="checkbox" id="planActive" checked={plan.active} onChange={e=>set("active",e.target.checked)} style={{width:16,height:16,accentColor:"#22c55e"}}/>
+          <label htmlFor="planActive" style={{fontSize:12,color:"#aaa",cursor:"pointer"}}>Active (auto-dispatch)</label>
+        </div>
+      </div>
+
+      {/* Day tabs */}
+      <div style={{display:"flex",gap:4,marginBottom:12,overflowX:"auto"}}>
+        {WEEK_DAYS.map((day,i)=>{
+          const count=plan.slots[i]?.entries?.length||0;
+          const isActive=activeDay===i;
+          return(
+            <button key={day} onClick={()=>setActiveDay(i)}
+              style={{padding:"8px 14px",borderRadius:10,background:isActive?"#d4a84322":"transparent",border:`1px solid ${isActive?"#d4a843":"#252540"}`,color:isActive?"#d4a843":"#555",fontSize:12,fontWeight:isActive?700:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",flexShrink:0,position:"relative"}}>
+              {day}
+              {count>0&&<span style={{marginLeft:6,background:isActive?"#d4a843":"#555",color:"#000",borderRadius:10,padding:"1px 6px",fontSize:9,fontWeight:800}}>{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Copy from another day */}
+      <div style={{marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,color:"#555"}}>Copy from:</span>
+        {WEEK_DAYS.map((day,i)=>i!==activeDay&&(
+          <button key={day} onClick={()=>{if(confirm(`Copy ${day} entries to ${WEEK_DAYS[activeDay]}?`))copyDay(i,activeDay);}}
+            style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid #252540",color:"#555",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+            {WEEK_DAYS_SHORT[i]}
+          </button>
+        ))}
+      </div>
+
+      {/* Entries for selected day */}
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:14,padding:"16px",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>{WEEK_DAYS[activeDay]} — {currentSlot?.entries?.length||0} entries</div>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>addEntry("round")}
+              style={{padding:"6px 12px",background:"#a78bfa22",border:"1px solid #a78bfa44",borderRadius:8,color:"#a78bfa",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+              + Round
+            </button>
+            <button onClick={()=>addEntry("task")}
+              style={{padding:"6px 12px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:8,color:"#d4a843",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+              + Custom Task
+            </button>
+          </div>
+        </div>
+
+        {(!currentSlot?.entries?.length)&&(
+          <div style={{textAlign:"center",padding:"32px",color:"#333",fontSize:13}}>
+            No entries for {WEEK_DAYS[activeDay]}. Add a Round or Custom Task above.
+          </div>
+        )}
+
+        {currentSlot?.entries?.map((entry,ei)=>(
+          <div key={entry.id} style={{background:"#0a0a1a",border:`1px solid ${entry.type==="round"?"#a78bfa33":"#d4a84333"}`,borderRadius:10,padding:"12px",marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <span style={{fontSize:10,fontWeight:700,color:entry.type==="round"?"#a78bfa":"#d4a843",textTransform:"uppercase",letterSpacing:1}}>
+                {entry.type==="round"?"🔄 Round":"📋 Custom Task"}
+              </span>
+              <button onClick={()=>removeEntry(entry.id)} style={{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:16}}>✕</button>
+            </div>
+
+            {entry.type==="round"?(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.6fr",gap:8}}>
+                <div>
+                  <label style={L}>Round</label>
+                  <select style={IS} value={entry.roundId} onChange={e=>updateEntry(entry.id,{roundId:e.target.value})}>
+                    <option value="">Select round…</option>
+                    {["cleaner","porter","reception"].map(dept=>(
+                      <optgroup key={dept} label={dept.toUpperCase()}>
+                        {rounds.filter(r=>r.dept===dept).map(r=>(
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={L}>Assign To</label>
+                  <select style={IS} value={entry.assigneeId} onChange={e=>updateEntry(entry.id,{assigneeId:e.target.value})}>
+                    <option value="">Select staff…</option>
+                    {["management","reception","porter","cleaner"].map(role=>(
+                      <optgroup key={role} label={role.toUpperCase()}>
+                        {sortedUsers.filter(u=>u.role===role).map(u=>(
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={L}>Priority</label>
+                  <select style={IS} value={entry.priority} onChange={e=>updateEntry(entry.id,{priority:e.target.value})}>
+                    {["urgent","high","medium","low"].map(p=><option key={p}>{p}</option>)}
+                  </select>
+                </div>
+              </div>
+            ):(
+              <div style={{display:"grid",gap:8}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.6fr",gap:8}}>
+                  <div><label style={L}>Task Title</label><input style={IS} value={entry.title} onChange={e=>updateEntry(entry.id,{title:e.target.value})} placeholder="e.g. Deep Clean Gym"/></div>
+                  <div>
+                    <label style={L}>Location</label>
+                    <select style={IS} value={entry.location} onChange={e=>updateEntry(entry.id,{location:e.target.value})}>
+                      <option value="">Select…</option>
+                      {ALL_LOCATIONS.sort().map(l=><option key={l}>{l}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={L}>Priority</label>
+                    <select style={IS} value={entry.priority} onChange={e=>updateEntry(entry.id,{priority:e.target.value})}>
+                      {["urgent","high","medium","low"].map(p=><option key={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={L}>Assign To</label>
+                  <select style={IS} value={entry.assigneeId} onChange={e=>updateEntry(entry.id,{assigneeId:e.target.value})}>
+                    <option value="">Select staff…</option>
+                    {["management","reception","porter","cleaner"].map(role=>(
+                      <optgroup key={role} label={role.toUpperCase()}>
+                        {sortedUsers.filter(u=>u.role===role).map(u=>(
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={L}>Checklist items (one per line)</label>
+                  <textarea style={{...IS,height:72,resize:"none"}}
+                    value={(entry.tasks||[]).join("\n")}
+                    onChange={e=>updateEntry(entry.id,{tasks:e.target.value.split("\n").filter(Boolean)})}
+                    placeholder="Vacuum floors\nMop hard surfaces\nEmpty bins"/>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════
 // ROOT ADMIN APP
 // ═══════════════════════════════════════════════════════════
@@ -2302,6 +2732,7 @@ export default function AdminPanel(){
   const [pins,setPins]                   = useState({}); // overridden PINs
   const [rounds,setRounds]               = useState(DEFAULT_ROUNDS);
   const [customProducts,setCustomProducts] = useState([]);
+  const [weeklyPlans,setWeeklyPlans]     = useState([]);
 
   const allUsers=[...BASE_USERS,...extraProfiles];
 
@@ -2320,10 +2751,12 @@ export default function AdminPanel(){
     if(pns!==null)setPins(pns);
     if(rnd!==null)setRounds(rnd);
     if(cp!==null)setCustomProducts(cp);
+    const wp=await stor.get(SK.weekly);
+    if(wp!==null)setWeeklyPlans(wp);
     const locData={};
     await Promise.all([...BASE_USERS,...(ep||[])].map(async u=>{
       const d=await stor.get(SK.locPrefix+u.id);
-      if(d?.location)locData[u.id]=d;
+      if(d?.location||d?.name)locData[u.id]={...d,location:d.location||d.name};
     }));
     setLiveLocations(locData);
     setLastSync(new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
@@ -2448,6 +2881,7 @@ export default function AdminPanel(){
     {id:"locations_live",l:"Live Locations", e:"📡", badge:locCount},
     {id:"report",        l:"Daily Report",   e:"📄"},
     {id:"time_report",   l:"Time Report",    e:"⏱"},
+    {id:"weekly_plan",   l:"Weekly Plan",    e:"📅"},
     {id:"staff",         l:"Staff",          e:"👤"},
     {id:"repairs",       l:"Repairs",        e:"🔧", badge:repCount},
     {id:"orders",        l:"Supplies",       e:"🛒", badge:ordCount},
@@ -2523,6 +2957,14 @@ export default function AdminPanel(){
         {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
+        {tab==="weekly_plan"  &&<WeeklyPlanPanel
+          weeklyPlans={weeklyPlans}
+          allUsers={allUsers}
+          rounds={rounds}
+          tasks={tasks}
+          onSave={async p=>{await stor.set(SK.weekly,p);setWeeklyPlans(p);}}
+          onDispatch={async(newTasks)=>{await saveTasksWithNotify([...tasks,...newTasks],tasks);}}
+        />}
         {tab==="time_report"  &&<TimeReportPanel tasks={tasks} allUsers={allUsers}/>}
       </div>
     </div>
