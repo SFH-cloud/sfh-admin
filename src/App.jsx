@@ -1816,6 +1816,162 @@ function RoundsPanel({rounds,allUsers,adminUser,isFrantisek,onSave}){
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// TIME REPORT PANEL — time spent per location per staff member
+// ═══════════════════════════════════════════════════════════
+function TimeReportPanel({tasks,allUsers}){
+  const [date,setDate]=useState(tod());
+  const [expandedUsers,setExpandedUsers]=useState({});
+  const toggleUser=id=>setExpandedUsers(s=>({...s,[id]:!s[id]}));
+  const getUser=id=>allUsers.find(u=>u.id===id);
+
+  // Parse "HH:MM" time string into minutes since midnight
+  const toMins=t=>{
+    if(!t)return null;
+    const parts=t.split(":");
+    if(parts.length<2)return null;
+    return parseInt(parts[0])*60+parseInt(parts[1]);
+  };
+  const fmtDur=mins=>{
+    if(mins===null||isNaN(mins)||mins<0)return "—";
+    const h=Math.floor(mins/60),m=mins%60;
+    return h>0?`${h}h ${m}m`:`${m}m`;
+  };
+
+  // Build time data from tasks
+  // startTime comes from the start photo entry in task.photos
+  // endTime comes from task.updatedAt (when marked done)
+  const buildTaskTime=t=>{
+    const startEntry=(t.photos||[]).find(p=>p.type==="start");
+    const startTime=startEntry?.time||t.startTime||null;
+    const endTime=t.status==="done"&&t.updatedAt
+      ?new Date(t.updatedAt).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})
+      :null;
+    const startMins=toMins(startTime);
+    const endMins=toMins(endTime);
+    const durMins=(startMins!==null&&endMins!==null&&endMins>=startMins)
+      ?endMins-startMins:null;
+    return{startTime,endTime,durMins};
+  };
+
+  // Filter tasks for selected date
+  const dayTasks=tasks.filter(t=>{
+    const created=(t.createdAt||"").slice(0,10);
+    const updated=(t.updatedAt||"").slice(0,10);
+    return created===date||updated===date;
+  });
+
+  // Group by staff
+  const byUser={};
+  dayTasks.forEach(t=>{
+    const uid=t.assigneeId||"__unassigned__";
+    if(!byUser[uid])byUser[uid]=[];
+    byUser[uid].push(t);
+  });
+
+  // Sort by role then name
+  const roleOrder={management:0,reception:1,porter:2,cleaner:3};
+  const groups=Object.entries(byUser).sort(([aId],[bId])=>{
+    const au=getUser(aId),bu=getUser(bId);
+    const ro=(roleOrder[au?.role]??9)-(roleOrder[bu?.role]??9);
+    return ro!==0?ro:(au?.name||"").localeCompare(bu?.name||"");
+  });
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>⏱ Time Report</div>
+      </div>
+      <div style={{fontSize:13,color:"#555",marginBottom:20}}>Time spent per staff member per location — based on task start and completion times</div>
+
+      <div style={{marginBottom:20}}>
+        <label style={L}>Report Date</label>
+        <input type="date" style={{...I,maxWidth:200}} value={date} onChange={e=>setDate(e.target.value)}/>
+      </div>
+
+      {groups.length===0&&(
+        <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"48px",textAlign:"center",color:"#555"}}>
+          No task activity recorded for {new Date(date).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {groups.map(([uid,userTasks])=>{
+          const u=getUser(uid);
+          const color=RC[u?.role]||"#666";
+          const isOpen=!!expandedUsers[uid];
+
+          // Calculate total time for this user
+          const totalMins=userTasks.reduce((sum,t)=>{
+            const {durMins}=buildTaskTime(t);
+            return sum+(durMins||0);
+          },0);
+          const doneCount=userTasks.filter(t=>t.status==="done").length;
+
+          return(
+            <div key={uid} style={{background:"#111128",border:`1px solid ${isOpen?color+"44":"#1e1e38"}`,borderRadius:14,overflow:"hidden"}}>
+              {/* Staff header */}
+              <div onClick={()=>toggleUser(uid)} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",cursor:"pointer",background:isOpen?`${color}08`:"transparent"}}
+                onMouseEnter={e=>!isOpen&&(e.currentTarget.style.background="#0a0a1a")}
+                onMouseLeave={e=>!isOpen&&(e.currentTarget.style.background="transparent")}>
+                <Av name={u?.name||"?"} size={38} color={color}/>
+                <div style={{flex:1}}>
+                  <div style={{color:"#fff",fontSize:14,fontWeight:700}}>{u?.name||"Unassigned"}</div>
+                  <div style={{display:"flex",gap:12,marginTop:3}}>
+                    <span style={{fontSize:11,color:color}}>{doneCount}/{userTasks.length} tasks done</span>
+                    {totalMins>0&&<span style={{fontSize:11,color:"#d4a843",fontWeight:700}}>⏱ {fmtDur(totalMins)} total</span>}
+                  </div>
+                </div>
+                <Badge label={RL[u?.role]||"—"} color={color} sm/>
+                <div style={{fontSize:18,color:isOpen?color:"#555",transform:isOpen?"rotate(90deg)":"none",transition:"transform .2s",display:"inline-block",marginLeft:4}}>›</div>
+              </div>
+
+              {/* Location rows */}
+              {isOpen&&(
+                <div style={{borderTop:`1px solid ${color}22`}}>
+                  {/* Table header */}
+                  <div style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 1fr",padding:"8px 18px",background:"#0a0a1a"}}>
+                    {["Location","Start","Finish","Duration","Status"].map(h=>(
+                      <div key={h} style={{fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{h}</div>
+                    ))}
+                  </div>
+                  {userTasks.map(t=>{
+                    const {startTime,endTime,durMins}=buildTaskTime(t);
+                    const sc=SC[t.status]||"#666";
+                    const displayName=t.roundId&&t.location?t.location:t.title;
+                    return(
+                      <div key={t.id} style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 1fr",padding:"11px 18px",borderTop:"1px solid #0a0a1a",alignItems:"center"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#0a0a1a"}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:"#fff"}}>{displayName}</div>
+                          {t.roundId&&<div style={{fontSize:9,color:"#a78bfa"}}>🔄 {t.roundArea}/{t.roundTotal}</div>}
+                        </div>
+                        <div style={{fontSize:12,color:startTime?"#aaa":"#333",fontFamily:"monospace"}}>{startTime||"—"}</div>
+                        <div style={{fontSize:12,color:endTime?"#aaa":"#333",fontFamily:"monospace"}}>{endTime||"—"}</div>
+                        <div style={{fontSize:12,color:durMins!==null?"#d4a843":"#333",fontWeight:durMins?700:400}}>{fmtDur(durMins)}</div>
+                        <div><Badge label={t.status.replace("_"," ")} color={sc} sm/></div>
+                      </div>
+                    );
+                  })}
+                  {/* User total row */}
+                  <div style={{display:"grid",gridTemplateColumns:"2fr 0.8fr 0.8fr 0.8fr 1fr",padding:"10px 18px",background:`${color}10`,borderTop:`1px solid ${color}33`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:color}}>Total</div>
+                    <div/><div/>
+                    <div style={{fontSize:13,fontWeight:900,color:"#d4a843",fontFamily:"monospace"}}>{fmtDur(totalMins)}</div>
+                    <div style={{fontSize:11,color:"#555"}}>{doneCount} completed</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════
 // ROOT ADMIN APP
 // ═══════════════════════════════════════════════════════════
@@ -1949,6 +2105,7 @@ export default function AdminPanel(){
     {id:"orders",        l:"Supplies",       e:"🛒", badge:ordCount},
     {id:"inspections",   l:"Inspections",    e:"⭐"},
     {id:"rounds",        l:"Rounds",         e:"🔄"},
+    {id:"time_report",   l:"Time Report",    e:"⏱"},
   ];
 
   if(loading)return <div style={{minHeight:"100vh",background:"#070714",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#d4a843",fontFamily:"Georgia,serif",fontSize:26}}>SFH Admin</div></div>;
@@ -2018,6 +2175,7 @@ export default function AdminPanel(){
         {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
+        {tab==="time_report"  &&<TimeReportPanel tasks={tasks} allUsers={allUsers}/>}
       </div>
     </div>
   );
