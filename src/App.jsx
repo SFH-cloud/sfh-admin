@@ -1416,13 +1416,21 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
         allUsers={allUsers}
         onClose={()=>setViewTask(null)}
         onUpdate={t=>{
-          // Use saveTasks directly with functional update to avoid stale closure
-          saveTasks(prev=>prev.map(x=>x.id===t.id?t:x));
+          // Read latest tasks, update the one task, save all
+          setTasks(prev=>{
+            const next=prev.map(x=>x.id===t.id?t:x);
+            stor.set(SK.tasks,next);
+            return next;
+          });
           setViewTask(t);
         }}
         onDelete={id=>{onDelete(id);setViewTask(null);}}
         onSendBack={t=>{
-          saveTasks(prev=>prev.map(x=>x.id===t.id?t:x));
+          setTasks(prev=>{
+            const next=prev.map(x=>x.id===t.id?t:x);
+            stor.set(SK.tasks,next);
+            return next;
+          });
           setViewTask(null);
         }}
       />}
@@ -2829,13 +2837,7 @@ export default function AdminPanel(){
   const handleLogin=async u=>{await stor.set(SK.adminSess,{id:u.id});setAdminUser(u);};
   const handleLogout=async()=>{await stor.del(SK.adminSess);setAdminUser(null);};
 
-  const saveTasks  =async tOrFn=>{
-    setTasks(prev=>{
-      const next=typeof tOrFn==='function'?tOrFn(prev):tOrFn;
-      stor.set(SK.tasks,next); // save to Supabase
-      return next;
-    });
-  };
+  const saveTasks  =async t=>{await stor.set(SK.tasks,t);setTasks(t);};
   // Send push when new tasks are added
   const saveTasksWithNotify=async(newTasks, prevTasks)=>{
     await stor.set(SK.tasks,newTasks);
