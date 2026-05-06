@@ -188,19 +188,20 @@ const EDGE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co/functions/v1/push-not
 
 const sendPush = async (userIds, notification) => {
   try {
-    // Collect subscriptions for given user IDs
     const subs = (await Promise.all(
       userIds.map(id => stor.get('sh5_push_' + id))
     )).filter(Boolean);
-    if (!subs.length) return;
-    await fetch(EDGE_URL, {
+    if (!subs.length) { console.log('No push subscriptions for', userIds); return; }
+    const res = await fetch(EDGE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZmhiY2N5ZGFsdGVicG5mcXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MzAyOTIsImV4cCI6MjA5MzUwNjI5Mn0.uY4dwnTFqs1F43SMc9JChEta5PfQu4202LZ5owQ6Prc`,
+        'x-push-token': 'sfh-push-2026',
       },
       body: JSON.stringify({ subscriptions: subs, notification }),
     });
+    const data = await res.json();
+    console.log('Push result:', data);
   } catch(e) { console.log('Push failed:', e); }
 };
 
@@ -1621,7 +1622,7 @@ function RepairsPanel({repairs,allUsers,onUpdate}){
               <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",marginLeft:12,flexShrink:0}}>
                 <Badge label={r.urgency||"medium"} color={uc} sm/>
                 <select value={r.status} onChange={e=>onUpdate({...r,status:e.target.value})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"3px 8px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif"}}>
-                  {["open","in_progress","resolved"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
+                  {["open","in_progress","returned","resolved"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
                 </select>
               </div>
             </div>
@@ -1637,11 +1638,52 @@ function OrdersPanel({orders,allUsers,onUpdate,customProducts=[],onAddProduct}){
   const [showAdd,setShowAdd]=useState(false);
   const [newProd,setNewProd]=useState({name:"",icon:"🧴"});
   const ICONS=["🫧","🧼","🪣","🚽","🗑️","🧤","🌀","🧹","🧽","🪥","🧴","🧻","📦","🪑","🧺"];
+  const generateSuppliesPdf=()=>{
+    const pending=orders.filter(o=>o.status==="pending");
+    if(!pending.length){alert("No pending supply requests.");return;}
+    const w=window.open("","_blank");
+    if(!w){alert("Allow popups");return;}
+    const dateStr=new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    // Flatten all items across all pending orders
+    const allItems={};
+    pending.forEach(o=>{
+      (o.items||[]).forEach(it=>{
+        const k=it.name||it.id;
+        if(!allItems[k])allItems[k]={name:it.name,icon:it.icon||"📦",qty:0,locations:[]};
+        allItems[k].qty+=it.qty||1;
+        if(o.location&&!allItems[k].locations.includes(o.location))allItems[k].locations.push(o.location);
+      });
+    });
+    const items=Object.values(allItems).sort((a,b)=>a.name.localeCompare(b.name));
+    const css="*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Helvetica Neue,Arial,sans-serif;color:#111;padding:36px;}.header{border-bottom:3px solid #c9a227;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-start;}.logo{font-size:22px;font-weight:900;}.logo span{color:#c9a227;}.badge{background:#c9a227;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}.stat{background:#f9f7f0;border:1px solid #e8d99a;border-radius:8px;padding:12px;text-align:center;}.stat-val{font-size:26px;font-weight:900;color:#c9a227;}.stat-label{font-size:10px;text-transform:uppercase;color:#888;margin-top:3px;}.title{font-size:14px;font-weight:800;color:#c9a227;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e8d99a;}table{width:100%;border-collapse:collapse;}th{background:#f0ead5;font-size:9px;text-transform:uppercase;letter-spacing:1px;padding:7px 12px;text-align:left;color:#888;font-weight:700;}td{padding:9px 12px;border-bottom:1px solid #ece8d9;font-size:13px;}tr:last-child td{border-bottom:none;}.qty{font-weight:900;color:#c9a227;font-size:16px;text-align:center;}.loc{font-size:10px;color:#888;}.section{margin-bottom:24px;}.footer{margin-top:32px;padding-top:10px;border-top:1px solid #e8d99a;display:flex;justify-content:space-between;font-size:10px;color:#aaa;}@media print{body{padding:16px;}@page{margin:8mm;}}";
+    let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SFH Supply Request</title><style>${css}</style></head><body>`;
+    html+=`<div class="header"><div><div class="logo">Soho <span>House</span></div><div style="font-size:11px;color:#888;margin-top:2px">Supplies Request Sheet</div></div><div style="text-align:right"><div class="badge">${dateStr}</div><div style="font-size:10px;color:#aaa;margin-top:4px">Generated ${new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div></div></div>`;
+    html+=`<div class="summary"><div class="stat"><div class="stat-val">${pending.length}</div><div class="stat-label">Pending Requests</div></div><div class="stat"><div class="stat-val">${items.length}</div><div class="stat-label">Unique Items</div></div><div class="stat"><div class="stat-val">${items.reduce((s,i)=>s+i.qty,0)}</div><div class="stat-label">Total Units</div></div></div>`;
+    html+=`<div class="section"><div class="title">Consolidated Shopping List</div><table><tr><th>Item</th><th style="text-align:center">Qty Needed</th><th>Requested For</th></tr>`;
+    items.forEach(it=>{
+      html+=`<tr><td>${it.icon||"📦"} ${it.name}</td><td class="qty">${it.qty}</td><td class="loc">${it.locations.join(", ")||"—"}</td></tr>`;
+    });
+    html+=`</table></div>`;
+    // Individual requests breakdown
+    html+=`<div class="section"><div class="title">Individual Requests (${pending.length})</div><table><tr><th>Location</th><th>Items</th><th>Date</th></tr>`;
+    pending.forEach(o=>{
+      const itemStr=(o.items||[]).map(it=>`${it.name} ×${it.qty||1}`).join(", ");
+      html+=`<tr><td>📍 ${o.location||"—"}</td><td>${itemStr}</td><td>${o.date||"—"}</td></tr>`;
+    });
+    html+=`</table></div>`;
+    html+=`<div class="footer"><span>Soho House Operations</span><span>Print and take to supplies store</span></div></body></html>`;
+    w.document.write(html);w.document.close();
+    setTimeout(()=>w.print(),500);
+  };
+
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>Supply Orders ({orders.length})</div>
-        <button onClick={()=>setShowAdd(true)} style={{padding:"9px 16px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:10,color:"#d4a843",fontWeight:700,cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>+ Add Product to List</button>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={generateSuppliesPdf} style={{padding:"9px 16px",background:"#22c55e22",border:"1px solid #22c55e44",borderRadius:10,color:"#22c55e",fontWeight:700,cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>📄 PDF Shopping List</button>
+          <button onClick={()=>setShowAdd(true)} style={{padding:"9px 16px",background:"#d4a84322",border:"1px solid #d4a84344",borderRadius:10,color:"#d4a843",fontWeight:700,cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>+ Add Product</button>
+        </div>
       </div>
       {showAdd&&(
         <div style={{background:"#111128",border:"1px solid #d4a84333",borderRadius:14,padding:"18px",marginBottom:20}}>
@@ -2360,7 +2402,24 @@ export default function AdminPanel(){
       });
     }
   };
-  const saveRepairs=async r=>{await stor.set(SK.repairs,r);setRepairs(r);};
+  const saveRepairs=async(newRepairs,prevRepairs)=>{
+    await stor.set(SK.repairs,newRepairs);
+    setRepairs(newRepairs);
+    if(!prevRepairs)return;
+    // Notify staff when repair is returned/rejected
+    newRepairs.forEach(r=>{
+      const prev=prevRepairs.find(p=>p.id===r.id);
+      if(prev&&prev.status!==r.status&&(r.status==="returned"||r.status==="rejected")){
+        sendPush([r.reportedBy||r.userId],{
+          title:"🔧 Repair Update",
+          body:`${r.title||r.location||"Repair"} — ${r.status==="returned"?"Please review and resubmit":"Request rejected"}`,
+          tag:"repair-"+r.id,
+          requireInteraction:true,
+          url:"/",
+        });
+      }
+    });
+  };
   const saveOrders =async o=>{await stor.set(SK.orders,o);setOrders(o);};
 
   const addProfile=async p=>{const n=[...extraProfiles,p];await stor.set(SK.profiles,n);setExtraProfiles(n);};
@@ -2453,7 +2512,7 @@ export default function AdminPanel(){
         {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
-        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x))}/>}
+        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x),repairs)}/>}
         {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
