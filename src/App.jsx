@@ -2315,20 +2315,23 @@ function makeTask(loc, assigneeId, taskList, note=""){
     notes:note||undefined};
 }
 
-function generateDayRota(staff, deepCleanLocs=[]){
+function generateDayRota(staff, deepCleanLocs=[], pairOf={}){
   const n=staff.length; if(!n) return [];
 
-  const antonio  = staff.find(s=>s.id===ANTONIO_ID);
-  const danielli = staff.find(s=>s.id===DANIELLI_ID);
-  const others   = staff.filter(s=>s.id!==ANTONIO_ID&&s.id!==DANIELLI_ID);
-
-  // Build assign pool — Antonio+Danielli treated as one team slot
-  let pool;
-  if(antonio&&danielli){
-    pool=[{id:"team_AD",isTeam:true,members:[antonio,danielli]},...others];
-  } else {
-    pool=[...staff];
-  }
+  // Build pool from pairOf map (same logic as modal)
+  const visited=new Set();
+  const pool=[];
+  staff.forEach(s=>{
+    if(visited.has(s.id))return;
+    const partnerId=pairOf[s.id];
+    const partner=partnerId&&staff.find(x=>x.id===partnerId);
+    if(partner&&!visited.has(partner.id)){
+      pool.push({id:`team_\${s.id}_\${partner.id}`,isTeam:true,members:[s,partner]});
+      visited.add(s.id);visited.add(partner.id);
+    } else {
+      pool.push(s);visited.add(s.id);
+    }
+  });
   const np=pool.length;
 
   const entries=[];
@@ -2356,57 +2359,94 @@ function generateDayRota(staff, deepCleanLocs=[]){
 
 function RotaGeneratorModal({allUsers,onGenerate,onClose}){
   const cleaners=allUsers.filter(u=>u.role==="cleaner");
+  // Staff selection (who is working)
   const [sel,setSel]=useState(Object.fromEntries(cleaners.map(u=>[u.id,true])));
+  // Pairs: pairOf[userId] = partnerId | null
+  const [pairOf,setPairOf]=useState({[ANTONIO_ID]:DANIELLI_ID,[DANIELLI_ID]:ANTONIO_ID});
+  // Deep clean locations
   const [deepLocs,setDeepLocs]=useState([]);
-  const toggle=id=>setSel(s=>({...s,[id]:!s[id]}));
+
+  const toggleSel=id=>setSel(s=>({...s,[id]:!s[id]}));
   const toggleDeep=loc=>setDeepLocs(d=>d.includes(loc)?d.filter(x=>x!==loc):[...d,loc]);
+
   const staff=cleaners.filter(u=>sel[u.id]);
-  const n=staff.length;
 
-  // Build preview: slot i → person i%n
-  const preview=GEN_SLOTS.map((slot,i)=>({
-    slot,
-    person:n>0?staff[i%n]:null,
-  }));
+  // Set pair: A↔B (bidirectional), or clear if same selected again
+  const setPair=(idA,idB)=>{
+    setPairOf(p=>{
+      const next={...p};
+      // Clear existing pairs for A
+      Object.keys(next).forEach(k=>{if(next[k]===idA)delete next[k];});
+      delete next[idA];
+      if(idB){
+        // Clear existing pairs for B
+        Object.keys(next).forEach(k=>{if(next[k]===idB)delete next[k];});
+        delete next[idB];
+        next[idA]=idB;
+        next[idB]=idA;
+      }
+      return next;
+    });
+  };
 
-  // Group preview by person for display
-  const byPerson={};
-  preview.forEach(({slot,person})=>{
-    if(!person)return;
-    if(!byPerson[person.id])byPerson[person.id]={person,slots:[]};
-    byPerson[person.id].slots.push(slot.label);
+  // Build pool for generation
+  const buildPool=()=>{
+    const visited=new Set();
+    const pool=[];
+    staff.forEach(s=>{
+      if(visited.has(s.id))return;
+      const partnerId=pairOf[s.id];
+      const partner=partnerId&&staff.find(x=>x.id===partnerId);
+      if(partner&&!visited.has(partner.id)){
+        pool.push({id:`team_${s.id}_${partner.id}`,isTeam:true,members:[s,partner]});
+        visited.add(s.id);visited.add(partner.id);
+      } else {
+        pool.push(s);visited.add(s.id);
+      }
+    });
+    return pool;
+  };
+
+  const pool=buildPool();
+
+  // Preview
+  const preview=GEN_SLOTS.map((slot,i)=>({slot,assignee:pool[i%pool.length]}));
+  const byAssignee={};
+  preview.forEach(({slot,assignee})=>{
+    const key=assignee.id;
+    if(!byAssignee[key])byAssignee[key]={assignee,slots:[]};
+    byAssignee[key].slots.push(slot.label);
   });
+
+  const IS2={background:"#0d0d1e",border:"1px solid #252540",borderRadius:8,padding:"6px 10px",color:"#ccc",fontSize:11,fontFamily:"'DM Sans',sans-serif",outline:"none"};
 
   return(
     <div style={{position:"fixed",inset:0,background:"#000000b0",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}>
-      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"92vh",overflow:"auto",padding:"28px"}}>
+      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:620,maxHeight:"92vh",overflow:"auto",padding:"28px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <div style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>🔄 Generate Rota</div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:"#666",cursor:"pointer",fontSize:22}}>✕</button>
         </div>
 
-        {/* Info box */}
+        {/* Info */}
         <div style={{background:"#38bdf812",border:"1px solid #38bdf833",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:11,color:"#38bdf8",lineHeight:1.6}}>
-          All 9 location slots are always assigned — distributed round-robin across selected staff.
-          Fewer staff = more slots per person.
+          All {GEN_SLOTS.length} location slots always assigned. Paired staff share the same locations — Cleaner 1 vacuums & mops, Cleaner 2 cleans surfaces & sanitises.
         </div>
 
-        {/* Staff selection */}
+        {/* Who is working */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>
-            Who is working today? ({n}/{cleaners.length} selected)
+            Who is working? ({staff.length} selected)
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
             {cleaners.map(u=>(
-              <button key={u.id} onClick={()=>toggle(u.id)}
+              <button key={u.id} onClick={()=>toggleSel(u.id)}
                 style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:10,
                   background:sel[u.id]?"#4ade8015":"#0a0a1a",
-                  border:`1px solid ${sel[u.id]?"#4ade80":"#252540"}`,
-                  cursor:"pointer",textAlign:"left"}}>
+                  border:`1px solid ${sel[u.id]?"#4ade80":"#252540"}`,cursor:"pointer",textAlign:"left"}}>
                 <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
                   background:sel[u.id]?"#4ade80":"#1e1e38",
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:11,color:"#000",fontWeight:800}}>
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#000",fontWeight:800}}>
                   {sel[u.id]?"✓":""}
                 </div>
                 <div>
@@ -2418,19 +2458,51 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose}){
           </div>
         </div>
 
-        {/* Deep Clean selection */}
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:4}}>
-            Deep Clean locations <span style={{color:"#f97316",fontWeight:500,fontSize:10,textTransform:"none",letterSpacing:0}}>(optional — tick to add deep clean tasks)</span>
+        {/* Pair assignments */}
+        {staff.length>=2&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>
+              Working pairs <span style={{color:"#a78bfa",fontSize:10,textTransform:"none",letterSpacing:0,fontWeight:400}}>(pairs share same locations, split C1/C2 tasks)</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {staff.map(u=>{
+                const partnerId=pairOf[u.id];
+                const partner=staff.find(x=>x.id===partnerId);
+                // Only show each pair once (show for member with smaller index)
+                const uIdx=staff.findIndex(x=>x.id===u.id);
+                const pIdx=partner?staff.findIndex(x=>x.id===partner.id):-1;
+                if(partner&&pIdx<uIdx)return null;
+                return(
+                  <div key={u.id} style={{display:"flex",alignItems:"center",gap:8,background:"#0a0a1a",borderRadius:10,padding:"8px 12px"}}>
+                    <span style={{fontSize:12,color:"#fff",fontWeight:600,minWidth:80}}>{u.name.split(" ")[0]}</span>
+                    <span style={{fontSize:11,color:"#555"}}>pairs with</span>
+                    <select value={pairOf[u.id]||""} onChange={e=>setPair(u.id,e.target.value||null)} style={IS2}>
+                      <option value="">— solo —</option>
+                      {staff.filter(x=>x.id!==u.id).map(x=>(
+                        <option key={x.id} value={x.id}>{x.name.split(" ")[0]} {x.name.split(" ").slice(1).join(" ")}</option>
+                      ))}
+                    </select>
+                    {partner&&<span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa15",border:"1px solid #a78bfa33",borderRadius:6,padding:"2px 8px"}}>C1/C2 split</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>
+        )}
+
+        {/* Deep clean */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>
+            Deep Clean <span style={{color:"#f97316",fontSize:10,textTransform:"none",letterSpacing:0,fontWeight:400}}>(optional — select locations)</span>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {CLEANER_LOCATIONS.map(loc=>(
               <button key={loc} onClick={()=>toggleDeep(loc)}
-                style={{padding:"4px 10px",borderRadius:6,fontSize:10,fontWeight:deepLocs.includes(loc)?700:400,
+                style={{padding:"4px 10px",borderRadius:6,fontSize:10,
                   background:deepLocs.includes(loc)?"#f9731622":"transparent",
                   border:`1px solid ${deepLocs.includes(loc)?"#f97316":"#252540"}`,
                   color:deepLocs.includes(loc)?"#f97316":"#555",
-                  cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                  cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:deepLocs.includes(loc)?700:400}}>
                 {deepLocs.includes(loc)?"🔵 ":""}{loc}
               </button>
             ))}
@@ -2438,21 +2510,25 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose}){
           {deepLocs.length>0&&<div style={{marginTop:6,fontSize:10,color:"#f97316"}}>🔵 {deepLocs.length} location{deepLocs.length>1?"s":""} set for deep clean</div>}
         </div>
 
-        {/* Preview by person */}
-        {n>0&&(
+        {/* Preview */}
+        {staff.length>0&&(
           <div style={{marginBottom:16}}>
             <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>
-              Assignment preview ({GEN_SLOTS.length} slots → {n} staff)
+              Preview — {pool.length} slot{pool.length>1?"s":""} for {staff.length} staff
             </div>
             <div style={{background:"#0a0a1a",borderRadius:10,padding:"12px",display:"flex",flexDirection:"column",gap:8}}>
-              {Object.values(byPerson).map(({person,slots})=>(
-                <div key={person.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                  <span style={{color:"#4ade80",fontWeight:700,fontSize:12,minWidth:72,flexShrink:0,paddingTop:1}}>
-                    {person.name.split(" ")[0]}
+              {Object.values(byAssignee).map(({assignee,slots})=>(
+                <div key={assignee.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <span style={{color:"#4ade80",fontWeight:700,fontSize:11,minWidth:100,flexShrink:0,paddingTop:2}}>
+                    {assignee.isTeam?assignee.members.map(m=>m.name.split(" ")[0]).join(" + "):assignee.name.split(" ")[0]}
                   </span>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                     {slots.map(s=>(
-                      <span key={s} style={{background:"#1e1e38",border:"1px solid #252540",borderRadius:6,padding:"2px 8px",fontSize:10,color:"#aaa"}}>
+                      <span key={s} style={{
+                        background: s.split(",").flatMap(l=>deepLocs.includes(l.trim()))?"#f9731622":"#1e1e38",
+                        border:`1px solid ${s.split(",").flatMap(l=>deepLocs.includes(l.trim()))?"#f97316":"#252540"}`,
+                        borderRadius:6,padding:"2px 7px",fontSize:10,
+                        color: s.split(",").flatMap(l=>deepLocs.includes(l.trim()))?"#f97316":"#aaa"}}>
                         {s}
                       </span>
                     ))}
@@ -2464,16 +2540,12 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose}){
         )}
 
         <div style={{display:"flex",gap:8}}>
-          <button onClick={onClose}
-            style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
-            Cancel
-          </button>
+          <button onClick={onClose} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
           <button onClick={()=>{
-            if(!n){alert("Select at least 1 cleaner");return;}
-            onGenerate(generateDayRota(staff, deepLocs));
+            if(!staff.length){alert("Select at least 1 cleaner");return;}
+            onGenerate(generateDayRota(staff,deepLocs,pairOf));
             onClose();
-          }}
-            style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+          }} style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             ✨ Generate & Apply
           </button>
         </div>
