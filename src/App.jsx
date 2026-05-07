@@ -2282,11 +2282,22 @@ function TimeReportPanel({tasks,allUsers}){
 // ── Rota Generator ───────────────────────────────────────────────────────────
 // Cleaner 1 tasks (Antonio) = Vacuuming & Mopping (from Round 1 — Cleaner 1)
 // Cleaner 2 tasks (Danielli) = Toilets/Surfaces/Dusting (from Round 1 — Cleaner 2)
-const TASKS_C1 = ["Vacuum all floor surfaces","Mop all hard floors","Move chairs/furniture and vacuum underneath","Check vacuum bags and replace if needed"];
-const TASKS_C2 = ["Clean & sanitise all toilets","Clean thresholds and doorframes","Wipe down all surfaces","Dust shelves, ledges and fixtures","Clean windows and glass panels","Polish all mirrors","Restock soap and paper towels","Empty bins"];
+// Daily clean tasks (standard round)
+const TASKS_C1  = ["Vacuum all floor surfaces","Mop all hard floors","Move chairs/furniture and vacuum underneath","Check vacuum bags and replace if needed"];
+const TASKS_C2  = ["Clean & sanitise all toilets","Clean thresholds and doorframes","Wipe down all surfaces","Dust shelves, ledges and fixtures","Clean windows and glass panels","Polish all mirrors","Restock soap and paper towels","Empty bins"];
 const TASKS_STD = ["Clean & sanitise surfaces","Vacuum/sweep floors","Mop hard floors","Empty bins","Check & restock supplies","Report any damages"];
 const TASKS_GRP = ["Clean & sanitise all areas","Vacuum/mop all floors","Empty all bins","Check equipment & supplies","Restock supplies","Report any damages"];
-const TASKS_DEEP = ["Move all furniture and clean underneath","Deep clean all floor surfaces","Scrub grout and tile","Clean light fixtures and vents","Wash windows interior","Polish all fixtures and mirrors","Sanitise all high-touch surfaces","Clean walls and skirting boards","Check and restock all supplies"];
+
+// Deep clean checklist (added ON TOP of daily tasks)
+const TASKS_DEEP_EXTRA = ["Move ALL furniture and clean underneath","Scrub grout and tile","Clean light fixtures and vents","Wash windows interior and exterior","Clean walls and skirting boards","Polish all fixtures","Deep clean behind appliances/equipment","Check and reseal any grout if needed"];
+
+// Deep clean for solo worker = daily std + deep extra
+const TASKS_DEEP_SOLO = [...TASKS_STD, ...TASKS_DEEP_EXTRA];
+
+// Deep clean for pair — split: C1 gets daily C1 + first half of deep extra, C2 gets daily C2 + second half
+const TASKS_DEEP_HALF = Math.ceil(TASKS_DEEP_EXTRA.length / 2);
+const TASKS_DEEP_C1 = [...TASKS_C1, ...TASKS_DEEP_EXTRA.slice(0, TASKS_DEEP_HALF)];
+const TASKS_DEEP_C2 = [...TASKS_C2, ...TASKS_DEEP_EXTRA.slice(TASKS_DEEP_HALF)];
 
 const ANTONIO_ID  = "u11";
 const DANIELLI_ID = "u12";
@@ -2309,10 +2320,10 @@ const GEN_SLOTS = [
   {label:"Mill + Toilets",                 locs:["Mill + Toilets"]},
 ];
 
-function makeTask(loc, assigneeId, taskList, note=""){
+function makeTask(loc, assigneeId, taskList, note){
   return {id:uid(), type:"task", title:loc, location:loc,
     assigneeId, priority:"medium", tasks:[...taskList],
-    notes:note||undefined};
+    ...(note?{notes:note}:{})};
 }
 
 function generateDayRota(staff, deepCleanLocs=[], pairOf={}){
@@ -2340,7 +2351,8 @@ function generateDayRota(staff, deepCleanLocs=[], pairOf={}){
     const assignee=pool[i%np];
     slot.locs.forEach(loc=>{
       const isDeep=deepCleanLocs.includes(loc);
-      const taskList=isDeep?TASKS_DEEP:(slot.locs.length>1?TASKS_GRP:TASKS_STD);
+      // taskList used only for solo workers; pairs use C1/C2 specific lists
+      const taskList=slot.locs.length>1?TASKS_GRP:TASKS_STD;
 
       if(assignee.isTeam){
         const [mA,mB]=assignee.members; // Antonio=C1, Danielli=C2
