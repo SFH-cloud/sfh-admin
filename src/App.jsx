@@ -2423,7 +2423,7 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
   const pool=buildPool();
 
   // Preview
-  const preview=GEN_SLOTS.map((slot,i)=>({slot,assignee:pool[i%pool.length]}));
+  const preview=pool.length>0?GEN_SLOTS.map((slot,i)=>({slot,assignee:pool[i%pool.length]})):[];
   const byAssignee={};
   preview.forEach(({slot,assignee})=>{
     const key=assignee.id;
@@ -2549,10 +2549,10 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                     {slots.map(s=>(
                       <span key={s} style={{
-                        background: s.split(",").flatMap(l=>deepLocs.includes(l.trim()))?"#f9731622":"#1e1e38",
-                        border:`1px solid ${s.split(",").flatMap(l=>deepLocs.includes(l.trim()))?"#f97316":"#252540"}`,
+                        background: deepLocs.some(d=>s.includes(d))?"#f9731622":"#1e1e38",
+                        border:`1px solid ${deepLocs.some(d=>s.includes(d))?"#f97316":"#252540"}`,
                         borderRadius:6,padding:"2px 7px",fontSize:10,
-                        color: s.split(",").flatMap(l=>deepLocs.includes(l.trim()))?"#f97316":"#aaa"}}>
+                        color: deepLocs.some(d=>s.includes(d))?"#f97316":"#aaa"}}>
                         {s}
                       </span>
                     ))}
