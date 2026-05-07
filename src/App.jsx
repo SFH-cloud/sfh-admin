@@ -1211,9 +1211,7 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                     ✅ Approve Task
                   </button>
                 )}
-                {!canApprove&&!isApproved&&task.status!=="done"&&(
-                  <div style={{fontSize:10,color:"#555",textAlign:"center"}}>Mark all checklist items as OK to approve</div>
-                )}
+
                 <button onClick={()=>onDelete(task.id)} style={{width:"100%",padding:"9px",background:"transparent",border:"1px solid #ef444433",borderRadius:10,color:"#ef4444",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
                   Delete Task
                 </button>
