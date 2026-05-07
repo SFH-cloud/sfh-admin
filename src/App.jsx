@@ -1339,6 +1339,7 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
                               <div>
                                 <div style={{color:"#fff",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
                                   {typeEm[t.type]||"📋"} {t.roundId&&t.location?t.location:t.title}
+                                  {t.deepClean&&<span style={{background:"#f97316",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>🔵 DEEP</span>}
                                   {t.approvedAt&&<span style={{background:"#22c55e",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>✅ approved</span>}
                                   {!t.approvedAt&&(t.inspectionNote||t.inspectionHistory?.length>0)&&<span style={{background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>⚠️ return</span>}
                                 </div>
@@ -2521,7 +2522,7 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
             Deep Clean <span style={{color:"#f97316",fontSize:10,textTransform:"none",letterSpacing:0,fontWeight:400}}>(optional — select locations)</span>
           </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-            {CLEANER_LOCATIONS.map(loc=>(
+            {[...CLEANER_LOCATIONS].sort((a,b)=>a.localeCompare(b)).map(loc=>(
               <button key={loc} onClick={()=>toggleDeep(loc)}
                 style={{padding:"4px 10px",borderRadius:6,fontSize:10,
                   background:deepLocs.includes(loc)?"#f9731622":"transparent",
@@ -2597,9 +2598,11 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
   const todayName = WEEK_DAYS[(todayDow+6)%7]; // convert to Mon=0
 
   const createNewPlan=()=>{
+    const dayName=WEEK_DAYS[(new Date().getDay()+6)%7];
+    const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
     setEditPlan({
       id:"wp_"+Date.now(),
-      name:"New Weekly Plan",
+      name:dayName+" — "+dateStr,
       slots: WEEK_DAYS.map(day=>({day, entries:[]})),
       scheduleTime:"07:00",
       active:false,
