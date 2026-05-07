@@ -2280,94 +2280,149 @@ function TimeReportPanel({tasks,allUsers}){
 
 
 // ── Rota Generator ───────────────────────────────────────────────────────────
-const GEN_RESTAURANTS  = ["Pen Yen","Main Barn","Hay Barn","Mill + Toilets"];
-const GEN_SINGLE_PICK  = ["Glasshouse","Barwell"];
-const GEN_GROUP_A      = ["Boathouse","Gym","Sauna & Steam Room"];
-const GEN_GROUP_B      = ["Gate House","Check-out House"];
-const GEN_GROUP_C      = ["Workshop","Flowers","Soho Home"];
+// Slot types — each slot is assigned to one person (round-robin if fewer staff than slots)
+// Restaurants: 4 separate slots (one restaurant per slot)
+// Glasshouse:  1 slot
+// Barwell:     1 slot
+// Group A:     1 slot (Boathouse + Gym + Sauna always together)
+// Group B:     1 slot (Gate House + Check-out House always together)
+// Group C:     1 slot (Workshop + Flowers + Soho Home always together)
+// Total slots: 9 — distributed round-robin across selected staff
 
-function generateDayRota(staff, singlePick){
+const GEN_SLOTS = [
+  {label:"Pen Yen",          locs:["Pen Yen"]},
+  {label:"Main Barn",        locs:["Main Barn"]},
+  {label:"Hay Barn",         locs:["Hay Barn"]},
+  {label:"Mill + Toilets",   locs:["Mill + Toilets"]},
+  {label:"Glasshouse",       locs:["Glasshouse"]},
+  {label:"Barwell",          locs:["Barwell"]},
+  {label:"Boathouse / Gym / Sauna", locs:["Boathouse","Gym","Sauna & Steam Room"]},
+  {label:"Gate House / Check-out",  locs:["Gate House","Check-out House"]},
+  {label:"Workshop / Flowers / Soho Home", locs:["Workshop","Flowers","Soho Home"]},
+];
+
+const SLOT_TASKS = {
+  single:["Clean & sanitise surfaces","Vacuum/sweep floors","Empty bins","Check & restock supplies","Report any damages"],
+  group: ["Clean & sanitise all areas","Vacuum/mop floors","Empty all bins","Check equipment & supplies","Report any damages"],
+};
+
+function generateDayRota(staff){
   const n=staff.length; if(!n) return [];
   const entries=[];
-  // Restaurants — one per person
-  staff.forEach((s,i)=>{
-    const loc=GEN_RESTAURANTS[i%GEN_RESTAURANTS.length];
-    entries.push({id:uid(),type:"task",title:loc,location:loc,assigneeId:s.id,priority:"medium",
-      tasks:["Clean & sanitise surfaces","Vacuum/sweep floors","Empty bins","Check & restock supplies","Report damages"]});
+  GEN_SLOTS.forEach((slot,i)=>{
+    const person=staff[i%n]; // round-robin
+    const isGroup=slot.locs.length>1;
+    const taskList=isGroup?SLOT_TASKS.group:SLOT_TASKS.single;
+    slot.locs.forEach(loc=>{
+      entries.push({
+        id:uid(),type:"task",
+        title:loc,location:loc,
+        assigneeId:person.id,
+        priority:"medium",
+        tasks:[...taskList],
+      });
+    });
   });
-  // Single pick — person 0
-  entries.push({id:uid(),type:"task",title:singlePick,location:singlePick,assigneeId:staff[0].id,priority:"medium",
-    tasks:["Full clean","Vacuum/mop","Empty bins","Sanitise surfaces"]});
-  // Group A — person 1 (or 0)
-  const aIdx=Math.min(1,n-1);
-  GEN_GROUP_A.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,assigneeId:staff[aIdx].id,priority:"medium",
-    tasks:["Clean & sanitise","Mop/vacuum floors","Empty bins","Check equipment","Restock supplies"]}));
-  // Group B — person 2 (or last)
-  const bIdx=Math.min(2,n-1);
-  GEN_GROUP_B.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,assigneeId:staff[bIdx].id,priority:"medium",
-    tasks:["Full clean","Vacuum/sweep","Empty bins","Sanitise surfaces","Check & restock"]}));
-  // Group C — person 3 (or last)
-  const cIdx=Math.min(3,n-1);
-  GEN_GROUP_C.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,assigneeId:staff[cIdx].id,priority:"medium",
-    tasks:["Full clean","Vacuum/mop","Empty bins","Sanitise surfaces"]}));
   return entries;
 }
 
 function RotaGeneratorModal({allUsers,onGenerate,onClose}){
   const cleaners=allUsers.filter(u=>u.role==="cleaner");
   const [sel,setSel]=useState(Object.fromEntries(cleaners.map(u=>[u.id,true])));
-  const [pick,setPick]=useState(GEN_SINGLE_PICK[0]);
   const toggle=id=>setSel(s=>({...s,[id]:!s[id]}));
   const staff=cleaners.filter(u=>sel[u.id]);
   const n=staff.length;
+
+  // Build preview: slot i → person i%n
+  const preview=GEN_SLOTS.map((slot,i)=>({
+    slot,
+    person:n>0?staff[i%n]:null,
+  }));
+
+  // Group preview by person for display
+  const byPerson={};
+  preview.forEach(({slot,person})=>{
+    if(!person)return;
+    if(!byPerson[person.id])byPerson[person.id]={person,slots:[]};
+    byPerson[person.id].slots.push(slot.label);
+  });
+
   return(
     <div style={{position:"fixed",inset:0,background:"#000000b0",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}>
-      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"auto",padding:"28px"}}>
+      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"92vh",overflow:"auto",padding:"28px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <div style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif"}}>🔄 Generate Rota</div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:"#666",cursor:"pointer",fontSize:22}}>✕</button>
         </div>
+
+        {/* Info box */}
+        <div style={{background:"#38bdf812",border:"1px solid #38bdf833",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:11,color:"#38bdf8",lineHeight:1.6}}>
+          All 9 location slots are always assigned — distributed round-robin across selected staff.
+          Fewer staff = more slots per person.
+        </div>
+
+        {/* Staff selection */}
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>Who is working? ({n} selected)</div>
+          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>
+            Who is working today? ({n}/{cleaners.length} selected)
+          </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
             {cleaners.map(u=>(
-              <button key={u.id} onClick={()=>toggle(u.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:10,background:sel[u.id]?"#4ade8015":"#0a0a1a",border:`1px solid ${sel[u.id]?"#4ade80":"#252540"}`,cursor:"pointer",textAlign:"left"}}>
-                <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,background:sel[u.id]?"#4ade80":"#252540",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#000",fontWeight:800}}>{sel[u.id]?"✓":""}</div>
-                <div style={{fontSize:12,fontWeight:600,color:sel[u.id]?"#fff":"#666"}}>{u.name.split(" ")[0]} <span style={{fontSize:10,color:"#555"}}>{u.name.split(" ").slice(1).join(" ")}</span></div>
+              <button key={u.id} onClick={()=>toggle(u.id)}
+                style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:10,
+                  background:sel[u.id]?"#4ade8015":"#0a0a1a",
+                  border:`1px solid ${sel[u.id]?"#4ade80":"#252540"}`,
+                  cursor:"pointer",textAlign:"left"}}>
+                <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
+                  background:sel[u.id]?"#4ade80":"#1e1e38",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:11,color:"#000",fontWeight:800}}>
+                  {sel[u.id]?"✓":""}
+                </div>
+                <div>
+                  <div style={{fontSize:12,fontWeight:600,color:sel[u.id]?"#fff":"#555"}}>{u.name.split(" ")[0]}</div>
+                  <div style={{fontSize:9,color:"#444"}}>{u.name.split(" ").slice(1).join(" ")}</div>
+                </div>
               </button>
             ))}
           </div>
         </div>
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>Single location (pick one)</div>
-          <div style={{display:"flex",gap:8}}>
-            {GEN_SINGLE_PICK.map(loc=>(
-              <button key={loc} onClick={()=>setPick(loc)} style={{flex:1,padding:"9px",borderRadius:10,background:pick===loc?"#d4a84322":"transparent",border:`1px solid ${pick===loc?"#d4a843":"#252540"}`,color:pick===loc?"#d4a843":"#555",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{loc}</button>
-            ))}
-          </div>
-        </div>
+
+        {/* Preview by person */}
         {n>0&&(
-          <div style={{background:"#0a0a1a",borderRadius:10,padding:"12px",marginBottom:16,fontSize:11,lineHeight:1.8}}>
-            <div style={{fontWeight:700,color:"#aaa",marginBottom:4}}>Preview:</div>
-            {staff.map((s,i)=>(
-              <div key={s.id} style={{display:"flex",gap:8}}>
-                <span style={{color:"#4ade80",fontWeight:700,minWidth:80,flexShrink:0}}>{s.name.split(" ")[0]}</span>
-                <span style={{color:"#666"}}>
-                  {GEN_RESTAURANTS[i%GEN_RESTAURANTS.length]}
-                  {i===0?`, ${pick}`:""}
-                  {i===Math.min(1,n-1)?(i===0?"":", ")+GEN_GROUP_A.join(", "):""}
-                  {i===Math.min(2,n-1)&&i!==Math.min(1,n-1)?(", ")+GEN_GROUP_B.join(", "):""}
-                  {i===Math.min(2,n-1)&&i===Math.min(1,n-1)?(", ")+GEN_GROUP_B.join(", "):""}
-                  {i===Math.min(3,n-1)&&i!==Math.min(2,n-1)?(", ")+GEN_GROUP_C.join(", "):""}
-                  {i===Math.min(3,n-1)&&i===Math.min(2,n-1)&&i!==Math.min(1,n-1)?(", ")+GEN_GROUP_C.join(", "):""}
-                </span>
-              </div>
-            ))}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>
+              Assignment preview ({GEN_SLOTS.length} slots → {n} staff)
+            </div>
+            <div style={{background:"#0a0a1a",borderRadius:10,padding:"12px",display:"flex",flexDirection:"column",gap:8}}>
+              {Object.values(byPerson).map(({person,slots})=>(
+                <div key={person.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <span style={{color:"#4ade80",fontWeight:700,fontSize:12,minWidth:72,flexShrink:0,paddingTop:1}}>
+                    {person.name.split(" ")[0]}
+                  </span>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {slots.map(s=>(
+                      <span key={s} style={{background:"#1e1e38",border:"1px solid #252540",borderRadius:6,padding:"2px 8px",fontSize:10,color:"#aaa"}}>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
         <div style={{display:"flex",gap:8}}>
-          <button onClick={onClose} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
-          <button onClick={()=>{if(!n){alert("Select at least 1 cleaner");return;}onGenerate(generateDayRota(staff,pick));onClose();}}
+          <button onClick={onClose}
+            style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+            Cancel
+          </button>
+          <button onClick={()=>{
+            if(!n){alert("Select at least 1 cleaner");return;}
+            onGenerate(generateDayRota(staff));
+            onClose();
+          }}
             style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             ✨ Generate & Apply
           </button>
