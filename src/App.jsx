@@ -1339,7 +1339,7 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
                               <div>
                                 <div style={{color:"#fff",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
                                   {typeEm[t.type]||"📋"} {t.roundId&&t.location?t.location:t.title}
-                                  {t.deepClean&&<span style={{background:"#f97316",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>🔵 DEEP CLEAN</span>}
+                                  {t.deepClean&&<span style={{background:"#f97316",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>DEEP CLEAN</span>}
                                   {t.approvedAt&&<span style={{background:"#22c55e",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>✅ approved</span>}
                                   {!t.approvedAt&&(t.inspectionNote||t.inspectionHistory?.length>0)&&<span style={{background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:4,textTransform:"uppercase",flexShrink:0}}>⚠️ return</span>}
                                 </div>
