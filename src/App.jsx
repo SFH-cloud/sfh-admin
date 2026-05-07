@@ -1601,7 +1601,7 @@ function LiveLocations({liveLocations,allUsers}){
 }
 
 // Repairs, Orders, Inspections, Locations panels
-function RepairsPanel({repairs,allUsers,onUpdate}){
+function RepairsPanel({repairs,allUsers,onUpdate,onDelete}){
   const getUser=id=>allUsers.find(u=>u.id===id);
   return(
     <div>
@@ -1622,9 +1622,12 @@ function RepairsPanel({repairs,allUsers,onUpdate}){
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",marginLeft:12,flexShrink:0}}>
                 <Badge label={r.urgency||"medium"} color={uc} sm/>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
                 <select value={r.status} onChange={e=>onUpdate({...r,status:e.target.value})} style={{background:"transparent",border:`1px solid ${sc}44`,borderRadius:8,padding:"3px 8px",color:sc,fontSize:11,cursor:"pointer",outline:"none",fontFamily:"'DM Sans',sans-serif"}}>
                   {["open","in_progress","returned","resolved"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}
                 </select>
+                <button onClick={()=>onDelete(r.id)} style={{background:"transparent",border:"1px solid #ef444433",borderRadius:8,padding:"4px 9px",color:"#ef4444",cursor:"pointer",fontSize:13}}>✕</button>
+              </div>
               </div>
             </div>
           </div>
@@ -3320,7 +3323,7 @@ export default function AdminPanel(){
         {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
-        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x),repairs)}/>}
+        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x),repairs)} onDelete={id=>saveRepairs(repairs.filter(r=>r.id!==id))}/>}
         {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} onDelete={id=>saveOrders(orders.filter(o=>o.id!==id))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
