@@ -2320,9 +2320,10 @@ const GEN_SLOTS = [
   {label:"Mill + Toilets",                 locs:["Mill + Toilets"]},
 ];
 
-function makeTask(loc, assigneeId, taskList, note){
+function makeTask(loc, assigneeId, taskList, note, isDeep=false){
   return {id:uid(), type:"task", title:loc, location:loc,
-    assigneeId, priority:"medium", tasks:[...taskList],
+    assigneeId, priority:isDeep?"high":"medium", tasks:[...taskList],
+    ...(isDeep?{deepClean:true}:{}),
     ...(note?{notes:note}:{})};
 }
 
@@ -2566,17 +2567,11 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
           <button onClick={()=>{
-            console.log("GEN clicked staff="+staff.length+" deep="+deepLocs.length);
             if(!staff.length){alert("Select at least 1 cleaner");return;}
             try{
-              const res=generateDayRota(staff,deepLocs,pairOf,pairRotation);
-              console.log("GEN res="+res.length);
-              onGenerate(res,pairOf);
+              onGenerate(generateDayRota(staff,deepLocs,pairOf,pairRotation),pairOf);
               onClose();
-            }catch(e){
-              console.error("GEN ERR",e);
-              alert("Error: "+e.name+": "+e.message);
-            }
+            }catch(e){alert("Error: "+e.message);}
           }} style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             ✨ Generate & Apply
           </button>
