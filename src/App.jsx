@@ -2717,6 +2717,7 @@ export default function AdminPanel(){
   const [adminUser,setAdminUser]         = useState(null);
   const [extraProfiles,setExtraProfiles] = useState([]);
   const [tasks,setTasks]                 = useState([]);
+  const tasksRef = useRef([]);
   const [repairs,setRepairs]             = useState([]);
   const [orders,setOrders]               = useState([]);
   const [inspections,setInspections]     = useState([]);
@@ -2738,7 +2739,7 @@ export default function AdminPanel(){
       stor.get(SK.inspections),stor.get(SK.profiles),stor.get(SK.checkouts),
       stor.get(SK.pins),stor.get(SK.rounds),stor.get("sh5_custom_products"),
     ]);
-    if(tk!==null)setTasks(tk);
+    if(tk!==null){setTasks(tk);tasksRef.current=tk;}
     if(r!==null)setRepairs(r);
     if(o!==null)setOrders(o);
     if(ins!==null)setInspections(ins);
@@ -2818,11 +2819,16 @@ export default function AdminPanel(){
   const handleLogin=async u=>{await stor.set(SK.adminSess,{id:u.id});setAdminUser(u);};
   const handleLogout=async()=>{await stor.del(SK.adminSess);setAdminUser(null);};
 
-  const saveTasks  =async t=>{await stor.set(SK.tasks,t);setTasks(t);};
+  const saveTasks  =async t=>{
+    tasksRef.current=t;
+    setTasks(t);
+    await stor.set(SK.tasks,t);
+  };
   // Send push when new tasks are added
   const saveTasksWithNotify=async(newTasks, prevTasks)=>{
-    await stor.set(SK.tasks,newTasks);
+    tasksRef.current=newTasks;
     setTasks(newTasks);
+    await stor.set(SK.tasks,newTasks);
     // Find newly added tasks
     const added=newTasks.filter(t=>!prevTasks.find(p=>p.id===t.id));
     // Group by assignee
@@ -2945,7 +2951,7 @@ export default function AdminPanel(){
       </div>
       <div style={{flex:1,padding:"32px",overflowX:"auto",overflowY:"auto"}}>
         {tab==="overview"      &&<Overview tasks={tasks} repairs={repairs} orders={orders} inspections={inspections} liveLocations={liveLocations} allUsers={allUsers} onNav={tabId=>setTab(tabId)}/>}
-        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasksWithNotify([...tasks,t],tasks)} onCreateMultiple={newTasks=>saveTasksWithNotify([...tasks,...newTasks],tasks)} onUpdate={t=>saveTasks(tasks.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasks.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
+        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasksWithNotify([...tasks,t],tasks)} onCreateMultiple={newTasks=>saveTasksWithNotify([...tasks,...newTasks],tasks)} onUpdate={t=>saveTasks(tasksRef.current.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasksRef.current.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
         {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
