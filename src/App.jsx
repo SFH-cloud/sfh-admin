@@ -2718,34 +2718,8 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
     alert(`✓ ${newTasks.length} tasks dispatched for ${dayName}`);
   };
 
-  // Auto-dispatch check — every minute, dispatch today's slot if time matches
-  const weeklyPlansRef=useRef(weeklyPlans);
-  useEffect(()=>{weeklyPlansRef.current=weeklyPlans;},[weeklyPlans]);
-  const dispatchDayRef=useRef(dispatchDay);
-  useEffect(()=>{dispatchDayRef.current=dispatchDay;},[dispatchDay]);
-
-  useEffect(()=>{
-    const check=async()=>{
-      const now=new Date();
-      const dayName=WEEK_DAYS[(now.getDay()+6)%7];
-      const timeStr=now.toTimeString().slice(0,5); // HH:MM
-      const today=now.toISOString().slice(0,10);
-      for(const plan of weeklyPlansRef.current){
-        if(!plan.active)continue;
-        if(plan.scheduleTime!==timeStr)continue;
-        // Already dispatched today?
-        const lastDate=(plan.lastDispatched?.at||"").slice(0,10);
-        if(lastDate===today)continue;
-        const slot=plan.slots.find(s=>s.day===dayName);
-        if(!slot||!slot.entries.length)continue;
-        console.log("Auto-dispatching:",plan.name,"for",dayName,"at",timeStr);
-        await dispatchDayRef.current(plan,dayName,true);
-      }
-    };
-    const iv=setInterval(check,60000);
-    check(); // check on mount too
-    return()=>clearInterval(iv);
-  },[]);
+  // Auto-dispatch is handled server-side by Supabase Edge Function + pg_cron
+  // No client-side dispatch needed
 
   if(view==="edit"&&editPlan) return <WeeklyPlanEditor plan={editPlan} allUsers={allUsers} rounds={rounds} onSave={savePlan} onCancel={()=>{setView("list");setEditPlan(null);}} saving={saving}/>;
 
