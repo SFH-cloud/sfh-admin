@@ -2361,10 +2361,11 @@ function generateDayRota(staff, deepCleanLocs=[], pairOf={}, pairRotation={}){
         const [mA,mB]=assignee.members; // Antonio=C1, Danielli=C2
         const tA=isDeep?TASKS_DEEP_C1:TASKS_C1;
         const tB=isDeep?TASKS_DEEP_C2:TASKS_C2;
-        entries.push(makeTask(loc, mA.id, tA, `With ${mB.name.split(" ")[0]} — Vacuum & Mop${isDeep?" (Deep Clean)":""}`));
-        entries.push(makeTask(loc, mB.id, tB, `With ${mA.name.split(" ")[0]} — Surfaces & Sanitise${isDeep?" (Deep Clean)":""}`));
+        entries.push(makeTask(loc, mA.id, tA, `With ${mB.name.split(" ")[0]} — Vacuum & Mop${isDeep?" (Deep Clean)":""}`, isDeep));
+        entries.push(makeTask(loc, mB.id, tB, `With ${mA.name.split(" ")[0]} — Surfaces & Sanitise${isDeep?" (Deep Clean)":""}`, isDeep));
       } else {
-        entries.push(makeTask(loc, assignee.id, taskList, isDeep?"Deep Clean":undefined));
+        const soloTasks=isDeep?TASKS_DEEP_SOLO:taskList;
+        entries.push(makeTask(loc, assignee.id, soloTasks, isDeep?"Daily + Deep Clean":undefined, isDeep));
       }
     });
   });
