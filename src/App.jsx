@@ -2280,116 +2280,86 @@ function TimeReportPanel({tasks,allUsers}){
 
 
 // ── Rota Generator ───────────────────────────────────────────────────────────
-// 20 cleaner locations from CLEANER_LOCATIONS, grouped into slots:
-// Each slot = one person. Groups always cleaned together by same person.
-// Restaurants (4): Pen Yen, Main Barn, Hay Barn, Berenjak — one per slot
-// Also: Blake's, Canteen, Canteen Office, Cinema — one per slot
-// Single: Glasshouse — 1 slot, Barwell — 1 slot (separate people)
-// Group A (always together): Boathouse + Gym + Sauna & Steam Room
-// Group B (always together): Gate House + Check-out House
-// Group C (always together): Workshop + Flowers + Soho Home
-// Group D (always together): Club Reception + Office (1 slot)
-// Total: 12 slots distributed round-robin
-// Special rule: Antonio (u11) & Danielli (u12) always get consecutive slots → same locations
-
-const GEN_SLOTS = [
-  {label:"Pen Yen",                   locs:["Pen Yen"]},
-  {label:"Main Barn",                 locs:["Main Barn"]},
-  {label:"Hay Barn",                  locs:["Hay Barn"]},
-  {label:"Berenjak",                  locs:["Berenjak"]},
-  {label:"Blake's",                   locs:["Blake's"]},
-  {label:"Canteen + Canteen Office",  locs:["Canteen","Canteen Office"]},
-  {label:"Cinema",                    locs:["Cinema"]},
-  {label:"Glasshouse",                locs:["Glasshouse"]},
-  {label:"Barwell",                   locs:["Barwell"]},
-  {label:"Boathouse / Gym / Sauna",   locs:["Boathouse","Gym","Sauna & Steam Room"]},
-  {label:"Gate House / Check-out",    locs:["Gate House","Check-out House"]},
-  {label:"Workshop / Flowers / Soho Home", locs:["Workshop","Flowers","Soho Home"]},
-  {label:"Club Reception + Office",   locs:["Club Reception + Office"]},
-  {label:"Mill + Toilets",            locs:["Mill + Toilets"]},
-];
-
-const SLOT_TASKS_SINGLE = ["Clean & sanitise surfaces","Vacuum/sweep floors","Empty bins","Check & restock supplies","Report any damages"];
-const SLOT_TASKS_GROUP  = ["Clean & sanitise all areas","Vacuum/mop all floors","Empty all bins","Check equipment & supplies","Report any damages"];
+// Cleaner 1 tasks (Antonio) = Vacuuming & Mopping (from Round 1 — Cleaner 1)
+// Cleaner 2 tasks (Danielli) = Toilets/Surfaces/Dusting (from Round 1 — Cleaner 2)
+const TASKS_C1 = ["Vacuum all floor surfaces","Mop all hard floors","Move chairs/furniture and vacuum underneath","Check vacuum bags and replace if needed"];
+const TASKS_C2 = ["Clean & sanitise all toilets","Clean thresholds and doorframes","Wipe down all surfaces","Dust shelves, ledges and fixtures","Clean windows and glass panels","Polish all mirrors","Restock soap and paper towels","Empty bins"];
+const TASKS_STD = ["Clean & sanitise surfaces","Vacuum/sweep floors","Mop hard floors","Empty bins","Check & restock supplies","Report any damages"];
+const TASKS_GRP = ["Clean & sanitise all areas","Vacuum/mop all floors","Empty all bins","Check equipment & supplies","Restock supplies","Report any damages"];
+const TASKS_DEEP = ["Move all furniture and clean underneath","Deep clean all floor surfaces","Scrub grout and tile","Clean light fixtures and vents","Wash windows interior","Polish all fixtures and mirrors","Sanitise all high-touch surfaces","Clean walls and skirting boards","Check and restock all supplies"];
 
 const ANTONIO_ID  = "u11";
 const DANIELLI_ID = "u12";
 
-function generateDayRota(staff){
+// 14 slots covering all 20 cleaner locations
+const GEN_SLOTS = [
+  {label:"Pen Yen",                        locs:["Pen Yen"]},
+  {label:"Main Barn",                      locs:["Main Barn"]},
+  {label:"Hay Barn",                       locs:["Hay Barn"]},
+  {label:"Berenjak",                       locs:["Berenjak"]},
+  {label:"Blake's",                        locs:["Blake's"]},
+  {label:"Canteen + Canteen Office",       locs:["Canteen","Canteen Office"]},
+  {label:"Cinema",                         locs:["Cinema"]},
+  {label:"Glasshouse",                     locs:["Glasshouse"]},
+  {label:"Barwell",                        locs:["Barwell"]},
+  {label:"Boathouse / Gym / Sauna",        locs:["Boathouse","Gym","Sauna & Steam Room"]},
+  {label:"Gate House / Check-out",         locs:["Gate House","Check-out House"]},
+  {label:"Workshop / Flowers / Soho Home", locs:["Workshop","Flowers","Soho Home"]},
+  {label:"Club Reception + Office",        locs:["Club Reception + Office"]},
+  {label:"Mill + Toilets",                 locs:["Mill + Toilets"]},
+];
+
+function makeTask(loc, assigneeId, taskList, note=""){
+  return {id:uid(), type:"task", title:loc, location:loc,
+    assigneeId, priority:"medium", tasks:[...taskList],
+    notes:note||undefined};
+}
+
+function generateDayRota(staff, deepCleanLocs=[]){
   const n=staff.length; if(!n) return [];
 
-  // Build assignment order: put Antonio & Danielli on consecutive slots
-  // so they share the same set of locations
   const antonio  = staff.find(s=>s.id===ANTONIO_ID);
   const danielli = staff.find(s=>s.id===DANIELLI_ID);
   const others   = staff.filter(s=>s.id!==ANTONIO_ID&&s.id!==DANIELLI_ID);
 
-  // Build pool: if both present, pair them consecutively
+  // Build assign pool — Antonio+Danielli treated as one team slot
   let pool;
   if(antonio&&danielli){
-    // Insert them adjacent — they'll get same slots (same person index mod n)
-    pool=[antonio,danielli,...others];
+    pool=[{id:"team_AD",isTeam:true,members:[antonio,danielli]},...others];
   } else {
     pool=[...staff];
   }
+  const np=pool.length;
 
-  // Assign slots round-robin across pool
-  // If Antonio & Danielli both present: they share slots because they occupy
-  // positions 0 and 1 — with 2 of them, slot i goes to pool[i%pool.length]
-  // We want them to get THE SAME slots — so assign both to same index
-  // Solution: treat them as one "team" — one slot per team
-
-  let assignPool;
-  if(antonio&&danielli){
-    // Create a "team" entry that expands to both
-    assignPool=[{id:"team_AD",name:"Antonio & Danielli",isTeam:true,members:[antonio,danielli]},...others];
-  } else {
-    assignPool=[...staff];
-  }
-
-  const np=assignPool.length;
   const entries=[];
 
   GEN_SLOTS.forEach((slot,i)=>{
-    const assignee=assignPool[i%np];
-    const isGroup=slot.locs.length>1;
-    const taskList=isGroup?[...SLOT_TASKS_GROUP]:[...SLOT_TASKS_SINGLE];
+    const assignee=pool[i%np];
+    slot.locs.forEach(loc=>{
+      const isDeep=deepCleanLocs.includes(loc);
+      const taskList=isDeep?TASKS_DEEP:(slot.locs.length>1?TASKS_GRP:TASKS_STD);
 
-    if(assignee.isTeam){
-      // Split locs between team members (or give all to both)
-      const half=Math.ceil(slot.locs.length/2);
-      const locsA=slot.locs.slice(0,half);
-      const locsB=slot.locs.slice(half);
-      const memberA=assignee.members[0];
-      const memberB=assignee.members[1];
-      // If only 1 loc, assign to Antonio, add Danielli as note
-      if(slot.locs.length===1){
-        entries.push({id:uid(),type:"task",title:slot.locs[0],location:slot.locs[0],
-          assigneeId:memberA.id,priority:"medium",tasks:[...taskList],
-          notes:`Working with ${memberB.name.split(" ")[0]}`});
-        entries.push({id:uid(),type:"task",title:slot.locs[0]+" (support)",location:slot.locs[0],
-          assigneeId:memberB.id,priority:"medium",tasks:[...taskList],
-          notes:`Working with ${memberA.name.split(" ")[0]}`});
+      if(assignee.isTeam){
+        const [mA,mB]=assignee.members; // Antonio=C1, Danielli=C2
+        const tA=isDeep?TASKS_DEEP:TASKS_C1;
+        const tB=isDeep?TASKS_DEEP:TASKS_C2;
+        entries.push(makeTask(loc, mA.id, tA, `With ${mB.name.split(" ")[0]} — Vacuum & Mop${isDeep?" (Deep Clean)":""}`));
+        entries.push(makeTask(loc, mB.id, tB, `With ${mA.name.split(" ")[0]} — Surfaces & Sanitise${isDeep?" (Deep Clean)":""}`));
       } else {
-        locsA.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,
-          assigneeId:memberA.id,priority:"medium",tasks:[...taskList],notes:`With ${memberB.name.split(" ")[0]}`}));
-        locsB.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,
-          assigneeId:memberB.id,priority:"medium",tasks:[...taskList],notes:`With ${memberA.name.split(" ")[0]}`}));
+        entries.push(makeTask(loc, assignee.id, taskList, isDeep?"Deep Clean":undefined));
       }
-    } else {
-      slot.locs.forEach(loc=>entries.push({
-        id:uid(),type:"task",title:loc,location:loc,
-        assigneeId:assignee.id,priority:"medium",tasks:[...taskList],
-      }));
-    }
+    });
   });
   return entries;
 }
 
+
 function RotaGeneratorModal({allUsers,onGenerate,onClose}){
   const cleaners=allUsers.filter(u=>u.role==="cleaner");
   const [sel,setSel]=useState(Object.fromEntries(cleaners.map(u=>[u.id,true])));
+  const [deepLocs,setDeepLocs]=useState([]);
   const toggle=id=>setSel(s=>({...s,[id]:!s[id]}));
+  const toggleDeep=loc=>setDeepLocs(d=>d.includes(loc)?d.filter(x=>x!==loc):[...d,loc]);
   const staff=cleaners.filter(u=>sel[u.id]);
   const n=staff.length;
 
@@ -2448,6 +2418,26 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose}){
           </div>
         </div>
 
+        {/* Deep Clean selection */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:4}}>
+            Deep Clean locations <span style={{color:"#f97316",fontWeight:500,fontSize:10,textTransform:"none",letterSpacing:0}}>(optional — tick to add deep clean tasks)</span>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>
+            {CLEANER_LOCATIONS.map(loc=>(
+              <button key={loc} onClick={()=>toggleDeep(loc)}
+                style={{padding:"4px 10px",borderRadius:6,fontSize:10,fontWeight:deepLocs.includes(loc)?700:400,
+                  background:deepLocs.includes(loc)?"#f9731622":"transparent",
+                  border:`1px solid ${deepLocs.includes(loc)?"#f97316":"#252540"}`,
+                  color:deepLocs.includes(loc)?"#f97316":"#555",
+                  cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                {deepLocs.includes(loc)?"🔵 ":""}{loc}
+              </button>
+            ))}
+          </div>
+          {deepLocs.length>0&&<div style={{marginTop:6,fontSize:10,color:"#f97316"}}>🔵 {deepLocs.length} location{deepLocs.length>1?"s":""} set for deep clean</div>}
+        </div>
+
         {/* Preview by person */}
         {n>0&&(
           <div style={{marginBottom:16}}>
@@ -2480,7 +2470,7 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose}){
           </button>
           <button onClick={()=>{
             if(!n){alert("Select at least 1 cleaner");return;}
-            onGenerate(generateDayRota(staff));
+            onGenerate(generateDayRota(staff, deepLocs));
             onClose();
           }}
             style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
