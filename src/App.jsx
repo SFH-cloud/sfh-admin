@@ -2598,11 +2598,22 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
   const todayName = WEEK_DAYS[(todayDow+6)%7]; // convert to Mon=0
 
   const createNewPlan=()=>{
-    const dayName=WEEK_DAYS[(new Date().getDay()+6)%7];
-    const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    // Find Monday of current week
+    const now=new Date();
+    const dow=(now.getDay()+6)%7; // Mon=0
+    const monday=new Date(now);
+    monday.setDate(now.getDate()-dow);
+    const mondayStr=monday.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    let weekName="Week of "+mondayStr;
+    // If a plan with this week already exists, use next week
+    if(weeklyPlans.some(p=>p.name===weekName)){
+      const nextMonday=new Date(monday);
+      nextMonday.setDate(monday.getDate()+7);
+      weekName="Week of "+nextMonday.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    }
     setEditPlan({
       id:"wp_"+Date.now(),
-      name:dayName+" — "+dateStr,
+      name:weekName,
       slots: WEEK_DAYS.map(day=>({day, entries:[]})),
       scheduleTime:"07:00",
       active:false,
@@ -2636,11 +2647,18 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
   // Dispatch today's tasks from a plan
   const dispatchDay=async(plan,dayName,skipConfirm=false)=>{
     const slot=plan.slots.find(s=>s.day===dayName);
-    if(!slot||!slot.entries.length){alert("No tasks defined for "+dayName);return;}
+    if(!slot||!slot.entries.length){if(!skipConfirm)alert("No tasks defined for "+dayName);return;}
     const now=new Date().toISOString();
     const dueDate=new Date().toISOString().slice(0,10);
+    // Anti-duplicate: check if staff already has a task from this plan for today
+    const existingToday=(await stor.get(SK.tasks)||[]).filter(t=>
+      t.weeklyPlanId===plan.id && (t.dueDate||"").slice(0,10)===dueDate
+    );
+    if(existingToday.length>0){
+      if(!skipConfirm)alert(`Already dispatched today — ${existingToday.length} tasks exist for this plan.`);
+      return;
+    }
     const newTasks=[];
-    // pairRotation stored in plan, incremented after each dispatch
     const rot=plan.pairRotation||{};
     slot.entries.forEach(entry=>{
       if(entry.roundId){
@@ -2692,30 +2710,34 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
     alert(`✓ ${newTasks.length} tasks dispatched for ${dayName}`);
   };
 
-  // Auto-dispatch check — runs on load, checks if any active plan needs dispatch today
+  // Auto-dispatch check — every minute, dispatch today's slot if time matches
+  const weeklyPlansRef=useRef(weeklyPlans);
+  useEffect(()=>{weeklyPlansRef.current=weeklyPlans;},[weeklyPlans]);
+  const dispatchDayRef=useRef(dispatchDay);
+  useEffect(()=>{dispatchDayRef.current=dispatchDay;},[dispatchDay]);
+
   useEffect(()=>{
     const check=async()=>{
       const now=new Date();
       const dayName=WEEK_DAYS[(now.getDay()+6)%7];
       const timeStr=now.toTimeString().slice(0,5); // HH:MM
-      weeklyPlans.forEach(async plan=>{
-        if(!plan.active)return;
-        if(plan.scheduleTime!==timeStr)return;
-        // Check if already dispatched today
+      const today=now.toISOString().slice(0,10);
+      for(const plan of weeklyPlansRef.current){
+        if(!plan.active)continue;
+        if(plan.scheduleTime!==timeStr)continue;
+        // Already dispatched today?
         const lastDate=(plan.lastDispatched?.at||"").slice(0,10);
-        const today=now.toISOString().slice(0,10);
-        if(lastDate===today)return;
-        // Auto-dispatch
+        if(lastDate===today)continue;
         const slot=plan.slots.find(s=>s.day===dayName);
-        if(!slot||!slot.entries.length)return;
-        console.log("Auto-dispatching weekly plan:",plan.name,"for",dayName);
-        await dispatchDay(plan,dayName,true);
-      });
+        if(!slot||!slot.entries.length)continue;
+        console.log("Auto-dispatching:",plan.name,"for",dayName,"at",timeStr);
+        await dispatchDayRef.current(plan,dayName,true);
+      }
     };
     const iv=setInterval(check,60000);
-    check();
+    check(); // check on mount too
     return()=>clearInterval(iv);
-  },[weeklyPlans]);
+  },[]);
 
   if(view==="edit"&&editPlan) return <WeeklyPlanEditor plan={editPlan} allUsers={allUsers} rounds={rounds} onSave={savePlan} onCancel={()=>{setView("list");setEditPlan(null);}} saving={saving}/>;
 
@@ -2793,16 +2815,30 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
               <div style={{borderTop:"1px solid #1e1e38",paddingTop:12}}>
                 <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8,fontWeight:700}}>Manual Dispatch</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {WEEK_DAYS.map(day=>{
+                  {WEEK_DAYS.map((day,di)=>{
                     const slot=plan.slots.find(s=>s.day===day);
                     const count=slot?.entries?.length||0;
                     const isToday=day===todayName;
-                    return count>0?(
-                      <button key={day} onClick={()=>dispatchDay(plan,day)}
-                        style={{padding:"5px 12px",borderRadius:8,background:isToday?"#d4a84322":"transparent",border:`1px solid ${isToday?"#d4a843":"#252540"}`,color:isToday?"#d4a843":"#666",fontSize:11,fontWeight:isToday?700:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+                    const todayDow=(new Date().getDay()+6)%7;
+                    const isPast=di<todayDow;
+                    const isFuture=di>todayDow;
+                    if(!count)return null;
+                    return(
+                      <button key={day}
+                        onClick={()=>!isPast&&dispatchDay(plan,day)}
+                        disabled={isPast}
+                        title={isPast?"Past day — cannot dispatch":isFuture?"Future day":undefined}
+                        style={{padding:"5px 12px",borderRadius:8,
+                          background:isToday?"#d4a84322":isPast?"transparent":"transparent",
+                          border:`1px solid ${isToday?"#d4a843":isPast?"#252525":"#252540"}`,
+                          color:isToday?"#d4a843":isPast?"#333":"#666",
+                          fontSize:11,fontWeight:isToday?700:500,
+                          cursor:isPast?"not-allowed":"pointer",
+                          fontFamily:"'DM Sans',sans-serif",
+                          opacity:isPast?0.4:1}}>
                         {isToday?"▶ ":""}{day.slice(0,3)} ({count})
                       </button>
-                    ):null;
+                    );
                   })}
                 </div>
               </div>
@@ -2816,17 +2852,7 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
 
 // ── Weekly Plan Editor ────────────────────────────────────────────────────────
 function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}){
-  const [plan,setPlan]=useState(()=>{
-    // Auto-set name based on today
-    const todayDow=(new Date().getDay()+6)%7;
-    const dayName=WEEK_DAYS[todayDow];
-    const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
-    const autoName=dayName+" — "+dateStr;
-    // Only auto-name if it's a new plan (default name)
-    return initPlan.name==="New Weekly Plan"||!initPlan.name
-      ?{...initPlan,name:autoName}
-      :initPlan;
-  });
+  const [plan,setPlan]=useState(initPlan);
   const [activeDay,setActiveDay]=useState(()=>(new Date().getDay()+6)%7); // default to today
   const [showGenerator,setShowGenerator]=useState(false);
   const set=(k,v)=>setPlan(p=>({...p,[k]:v}));
