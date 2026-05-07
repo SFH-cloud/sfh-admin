@@ -2816,10 +2816,33 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
 
 // ── Weekly Plan Editor ────────────────────────────────────────────────────────
 function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}){
-  const [plan,setPlan]=useState(initPlan);
-  const [activeDay,setActiveDay]=useState(0); // 0=Monday
+  const [plan,setPlan]=useState(()=>{
+    // Auto-set name based on today
+    const todayDow=(new Date().getDay()+6)%7;
+    const dayName=WEEK_DAYS[todayDow];
+    const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    const autoName=dayName+" — "+dateStr;
+    // Only auto-name if it's a new plan (default name)
+    return initPlan.name==="New Weekly Plan"||!initPlan.name
+      ?{...initPlan,name:autoName}
+      :initPlan;
+  });
+  const [activeDay,setActiveDay]=useState(()=>(new Date().getDay()+6)%7); // default to today
   const [showGenerator,setShowGenerator]=useState(false);
   const set=(k,v)=>setPlan(p=>({...p,[k]:v}));
+
+  // Auto-update plan name when activeDay changes
+  const setActiveDayWithName=(dayIdx)=>{
+    setActiveDay(dayIdx);
+    // Calculate date for that day: today + offset
+    const todayDow=(new Date().getDay()+6)%7; // Mon=0
+    const diff=dayIdx-todayDow;
+    const targetDate=new Date();
+    targetDate.setDate(targetDate.getDate()+diff);
+    const dayName=WEEK_DAYS[dayIdx];
+    const dateStr=targetDate.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    setPlan(p=>({...p,name:dayName+" — "+dateStr}));
+  };
 
   const currentSlot=plan.slots[activeDay];
 
@@ -2894,7 +2917,7 @@ function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}
           const count=plan.slots[i]?.entries?.length||0;
           const isActive=activeDay===i;
           return(
-            <button key={day} onClick={()=>setActiveDay(i)}
+            <button key={day} onClick={()=>setActiveDayWithName(i)}
               style={{padding:"8px 14px",borderRadius:10,background:isActive?"#d4a84322":"transparent",border:`1px solid ${isActive?"#d4a843":"#252540"}`,color:isActive?"#d4a843":"#555",fontSize:12,fontWeight:isActive?700:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",flexShrink:0,position:"relative"}}>
               {day}
               {count>0&&<span style={{marginLeft:6,background:isActive?"#d4a843":"#555",color:"#000",borderRadius:10,padding:"1px 6px",fontSize:9,fontWeight:800}}>{count}</span>}
