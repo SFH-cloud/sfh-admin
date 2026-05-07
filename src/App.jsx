@@ -2357,8 +2357,8 @@ function generateDayRota(staff, deepCleanLocs=[], pairOf={}, pairRotation={}){
 
       if(assignee.isTeam){
         const [mA,mB]=assignee.members; // Antonio=C1, Danielli=C2
-        const tA=isDeep?TASKS_DEEP:TASKS_C1;
-        const tB=isDeep?TASKS_DEEP:TASKS_C2;
+        const tA=isDeep?TASKS_DEEP_C1:TASKS_C1;
+        const tB=isDeep?TASKS_DEEP_C2:TASKS_C2;
         entries.push(makeTask(loc, mA.id, tA, `With ${mB.name.split(" ")[0]} — Vacuum & Mop${isDeep?" (Deep Clean)":""}`));
         entries.push(makeTask(loc, mB.id, tB, `With ${mA.name.split(" ")[0]} — Surfaces & Sanitise${isDeep?" (Deep Clean)":""}`));
       } else {
@@ -2567,9 +2567,7 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
           <button onClick={onClose} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
           <button onClick={()=>{
             if(!staff.length){alert("Select at least 1 cleaner");return;}
-            const result=generateDayRota(staff,deepLocs,pairOf,pairRotation);
-            alert("Generated "+result.length+" tasks. Applying...");
-            onGenerate(result,pairOf);
+            onGenerate(generateDayRota(staff,deepLocs,pairOf,pairRotation),pairOf);
             onClose();
           }} style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             ✨ Generate & Apply
