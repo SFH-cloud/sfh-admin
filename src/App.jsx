@@ -2625,9 +2625,11 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
 
   const savePlan=async(plan)=>{
     setSaving(true);
-    const updated=weeklyPlans.find(p=>p.id===plan.id)
-      ?weeklyPlans.map(p=>p.id===plan.id?plan:p)
-      :[...weeklyPlans,plan];
+    // Use latest weeklyPlans from state (not closure)
+    const current=await stor.get(SK.weekly)||[];
+    const updated=current.find(p=>p.id===plan.id)
+      ?current.map(p=>p.id===plan.id?plan:p)
+      :[...current,plan];
     await onSave(updated);
     setSaving(false);
     setView("list");
@@ -2646,8 +2648,13 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
 
   // Dispatch today's tasks from a plan
   const dispatchDay=async(plan,dayName,skipConfirm=false)=>{
-    const slot=plan.slots.find(s=>s.day===dayName);
+    // Re-read plan from Supabase to get latest entries (not stale state)
+    const freshPlans=await stor.get(SK.weekly)||[];
+    const freshPlan=freshPlans.find(p=>p.id===plan.id)||plan;
+    const slot=freshPlan.slots.find(s=>s.day===dayName);
     if(!slot||!slot.entries.length){if(!skipConfirm)alert("No tasks defined for "+dayName);return;}
+    // Use freshPlan for pairRotation etc
+    plan=freshPlan;
     const now=new Date().toISOString();
     const dueDate=new Date().toISOString().slice(0,10);
     // Anti-duplicate: check if staff already has a task from this plan for today
