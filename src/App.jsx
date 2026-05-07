@@ -2567,7 +2567,7 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
           <button onClick={onClose} style={{flex:1,padding:"11px",background:"transparent",border:"1px solid #252540",borderRadius:10,color:"#555",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Cancel</button>
           <button onClick={()=>{
             if(!staff.length){alert("Select at least 1 cleaner");return;}
-            onGenerate(generateDayRota(staff,deepLocs,pairOf));
+            onGenerate(generateDayRota(staff,deepLocs,pairOf,pairRotation),pairOf);
             onClose();
           }} style={{flex:2,padding:"11px",background:"#d4a843",border:"none",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             ✨ Generate & Apply
@@ -3018,6 +3018,7 @@ function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}
     </div>
     {showGenerator&&<RotaGeneratorModal
       allUsers={allUsers}
+      pairRotation={plan.pairRotation||{}}
       onGenerate={(entries,pairOf)=>{
           // Tag each entry with pairKey for rotation tracking
           const tagged=entries.map(e=>{
