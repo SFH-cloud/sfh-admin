@@ -2326,7 +2326,8 @@ function makeTask(loc, assigneeId, taskList, note){
     ...(note?{notes:note}:{})};
 }
 
-function generateDayRota(staff, deepCleanLocs=[], pairOf={}){
+// pairRotation: { "u11_u12": 0 } — 0 = A is C1, 1 = A is C2 (swapped)
+function generateDayRota(staff, deepCleanLocs=[], pairOf={}, pairRotation={}){
   const n=staff.length; if(!n) return [];
 
   // Build pool from pairOf map (same logic as modal)
@@ -2369,7 +2370,7 @@ function generateDayRota(staff, deepCleanLocs=[], pairOf={}){
 }
 
 
-function RotaGeneratorModal({allUsers,onGenerate,onClose}){
+function RotaGeneratorModal({allUsers,onGenerate,onClose,pairRotation={}}){
   const cleaners=allUsers.filter(u=>u.role==="cleaner");
   // Staff selection (who is working)
   const [sel,setSel]=useState(Object.fromEntries(cleaners.map(u=>[u.id,true])));
@@ -2494,7 +2495,18 @@ function RotaGeneratorModal({allUsers,onGenerate,onClose}){
                         <option key={x.id} value={x.id}>{x.name.split(" ")[0]} {x.name.split(" ").slice(1).join(" ")}</option>
                       ))}
                     </select>
-                    {partner&&<span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa15",border:"1px solid #a78bfa33",borderRadius:6,padding:"2px 8px"}}>C1/C2 split</span>}
+                    {partner&&(()=>{
+                      const rotKey=[u.id,partner.id].sort().join("_");
+                      const rot=(pairRotation[rotKey]||0)%2;
+                      const c1Name=rot===0?u.name.split(" ")[0]:partner.name.split(" ")[0];
+                      const c2Name=rot===0?partner.name.split(" ")[0]:u.name.split(" ")[0];
+                      return(
+                        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#4ade80",background:"#4ade8015",border:"1px solid #4ade8033",borderRadius:6,padding:"2px 8px"}}>C1: {c1Name}</span>
+                          <span style={{fontSize:10,color:"#38bdf8",background:"#38bdf815",border:"1px solid #38bdf833",borderRadius:6,padding:"2px 8px"}}>C2: {c2Name}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -2622,6 +2634,8 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
     const now=new Date().toISOString();
     const dueDate=new Date().toISOString().slice(0,10);
     const newTasks=[];
+    // pairRotation stored in plan, incremented after each dispatch
+    const rot=plan.pairRotation||{};
     slot.entries.forEach(entry=>{
       if(entry.roundId){
         // Dispatch a round — creates one task per area
@@ -2657,8 +2671,14 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
     if(!newTasks.length){alert("No tasks to dispatch");return;}
     if(!confirm(`Dispatch ${newTasks.length} tasks for ${dayName}?`))return;
     await onDispatch(newTasks);
-    // Update lastDispatched
-    const updated=weeklyPlans.map(p=>p.id===plan.id?{...p,lastDispatched:{day:dayName,at:now}}:p);
+    // Advance pairRotation for all pairs used today (so next dispatch swaps C1/C2)
+    const newRot={...rot};
+    slot.entries.forEach(entry=>{
+      if(entry.pairKey){
+        newRot[entry.pairKey]=(newRot[entry.pairKey]||0)+1;
+      }
+    });
+    const updated=weeklyPlans.map(p=>p.id===plan.id?{...p,lastDispatched:{day:dayName,at:now},pairRotation:newRot}:p);
     await onSave(updated);
     alert(`✓ ${newTasks.length} tasks dispatched for ${dayName}`);
   };
@@ -2998,7 +3018,16 @@ function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}
     </div>
     {showGenerator&&<RotaGeneratorModal
       allUsers={allUsers}
-      onGenerate={entries=>updateSlot(activeDay,[...currentSlot.entries,...entries])}
+      onGenerate={(entries,pairOf)=>{
+          // Tag each entry with pairKey for rotation tracking
+          const tagged=entries.map(e=>{
+            const partnerId=pairOf?.[e.assigneeId];
+            if(!partnerId)return e;
+            const pairKey=[e.assigneeId,partnerId].sort().join("_");
+            return {...e,pairKey};
+          });
+          updateSlot(activeDay,[...currentSlot.entries,...tagged]);
+        }}
       onClose={()=>setShowGenerator(false)}
     />}
     </>
