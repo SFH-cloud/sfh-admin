@@ -1634,7 +1634,7 @@ function RepairsPanel({repairs,allUsers,onUpdate}){
   );
 }
 
-function OrdersPanel({orders,allUsers,onUpdate,customProducts=[],onAddProduct}){
+function OrdersPanel({orders,allUsers,onUpdate,onDelete,customProducts=[],onAddProduct}){
   const getUser=id=>allUsers.find(u=>u.id===id);
   const [showAdd,setShowAdd]=useState(false);
   const [newProd,setNewProd]=useState({name:"",icon:"🧴"});
@@ -2634,7 +2634,7 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
   };
 
   // Dispatch today's tasks from a plan
-  const dispatchDay=async(plan,dayName)=>{
+  const dispatchDay=async(plan,dayName,skipConfirm=false)=>{
     const slot=plan.slots.find(s=>s.day===dayName);
     if(!slot||!slot.entries.length){alert("No tasks defined for "+dayName);return;}
     const now=new Date().toISOString();
@@ -2678,7 +2678,7 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
       }
     });
     if(!newTasks.length){alert("No tasks to dispatch");return;}
-    if(!confirm(`Dispatch ${newTasks.length} tasks for ${dayName}?`))return;
+    if(!skipConfirm&&!confirm(`Dispatch ${newTasks.length} tasks for ${dayName}?`))return;
     await onDispatch(newTasks);
     // Advance pairRotation for all pairs used today (so next dispatch swaps C1/C2)
     const newRot={...rot};
@@ -2709,7 +2709,7 @@ function WeeklyPlanPanel({weeklyPlans,allUsers,rounds,tasks,onSave,onDispatch}){
         const slot=plan.slots.find(s=>s.day===dayName);
         if(!slot||!slot.entries.length)return;
         console.log("Auto-dispatching weekly plan:",plan.name,"for",dayName);
-        await dispatchDay(plan,dayName);
+        await dispatchDay(plan,dayName,true);
       });
     };
     const iv=setInterval(check,60000);
@@ -3313,7 +3313,7 @@ export default function AdminPanel(){
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
         {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x),repairs)}/>}
-        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
+        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} onDelete={id=>saveOrders(orders.filter(o=>o.id!==id))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
         {tab==="weekly_plan"  &&<WeeklyPlanPanel
