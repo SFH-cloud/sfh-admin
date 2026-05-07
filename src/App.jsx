@@ -2280,48 +2280,108 @@ function TimeReportPanel({tasks,allUsers}){
 
 
 // ── Rota Generator ───────────────────────────────────────────────────────────
-// Slot types — each slot is assigned to one person (round-robin if fewer staff than slots)
-// Restaurants: 4 separate slots (one restaurant per slot)
-// Glasshouse:  1 slot
-// Barwell:     1 slot
-// Group A:     1 slot (Boathouse + Gym + Sauna always together)
-// Group B:     1 slot (Gate House + Check-out House always together)
-// Group C:     1 slot (Workshop + Flowers + Soho Home always together)
-// Total slots: 9 — distributed round-robin across selected staff
+// 20 cleaner locations from CLEANER_LOCATIONS, grouped into slots:
+// Each slot = one person. Groups always cleaned together by same person.
+// Restaurants (4): Pen Yen, Main Barn, Hay Barn, Berenjak — one per slot
+// Also: Blake's, Canteen, Canteen Office, Cinema — one per slot
+// Single: Glasshouse — 1 slot, Barwell — 1 slot (separate people)
+// Group A (always together): Boathouse + Gym + Sauna & Steam Room
+// Group B (always together): Gate House + Check-out House
+// Group C (always together): Workshop + Flowers + Soho Home
+// Group D (always together): Club Reception + Office (1 slot)
+// Total: 12 slots distributed round-robin
+// Special rule: Antonio (u11) & Danielli (u12) always get consecutive slots → same locations
 
 const GEN_SLOTS = [
-  {label:"Pen Yen",          locs:["Pen Yen"]},
-  {label:"Main Barn",        locs:["Main Barn"]},
-  {label:"Hay Barn",         locs:["Hay Barn"]},
-  {label:"Mill + Toilets",   locs:["Mill + Toilets"]},
-  {label:"Glasshouse",       locs:["Glasshouse"]},
-  {label:"Barwell",          locs:["Barwell"]},
-  {label:"Boathouse / Gym / Sauna", locs:["Boathouse","Gym","Sauna & Steam Room"]},
-  {label:"Gate House / Check-out",  locs:["Gate House","Check-out House"]},
+  {label:"Pen Yen",                   locs:["Pen Yen"]},
+  {label:"Main Barn",                 locs:["Main Barn"]},
+  {label:"Hay Barn",                  locs:["Hay Barn"]},
+  {label:"Berenjak",                  locs:["Berenjak"]},
+  {label:"Blake's",                   locs:["Blake's"]},
+  {label:"Canteen + Canteen Office",  locs:["Canteen","Canteen Office"]},
+  {label:"Cinema",                    locs:["Cinema"]},
+  {label:"Glasshouse",                locs:["Glasshouse"]},
+  {label:"Barwell",                   locs:["Barwell"]},
+  {label:"Boathouse / Gym / Sauna",   locs:["Boathouse","Gym","Sauna & Steam Room"]},
+  {label:"Gate House / Check-out",    locs:["Gate House","Check-out House"]},
   {label:"Workshop / Flowers / Soho Home", locs:["Workshop","Flowers","Soho Home"]},
+  {label:"Club Reception + Office",   locs:["Club Reception + Office"]},
+  {label:"Mill + Toilets",            locs:["Mill + Toilets"]},
 ];
 
-const SLOT_TASKS = {
-  single:["Clean & sanitise surfaces","Vacuum/sweep floors","Empty bins","Check & restock supplies","Report any damages"],
-  group: ["Clean & sanitise all areas","Vacuum/mop floors","Empty all bins","Check equipment & supplies","Report any damages"],
-};
+const SLOT_TASKS_SINGLE = ["Clean & sanitise surfaces","Vacuum/sweep floors","Empty bins","Check & restock supplies","Report any damages"];
+const SLOT_TASKS_GROUP  = ["Clean & sanitise all areas","Vacuum/mop all floors","Empty all bins","Check equipment & supplies","Report any damages"];
+
+const ANTONIO_ID  = "u11";
+const DANIELLI_ID = "u12";
 
 function generateDayRota(staff){
   const n=staff.length; if(!n) return [];
+
+  // Build assignment order: put Antonio & Danielli on consecutive slots
+  // so they share the same set of locations
+  const antonio  = staff.find(s=>s.id===ANTONIO_ID);
+  const danielli = staff.find(s=>s.id===DANIELLI_ID);
+  const others   = staff.filter(s=>s.id!==ANTONIO_ID&&s.id!==DANIELLI_ID);
+
+  // Build pool: if both present, pair them consecutively
+  let pool;
+  if(antonio&&danielli){
+    // Insert them adjacent — they'll get same slots (same person index mod n)
+    pool=[antonio,danielli,...others];
+  } else {
+    pool=[...staff];
+  }
+
+  // Assign slots round-robin across pool
+  // If Antonio & Danielli both present: they share slots because they occupy
+  // positions 0 and 1 — with 2 of them, slot i goes to pool[i%pool.length]
+  // We want them to get THE SAME slots — so assign both to same index
+  // Solution: treat them as one "team" — one slot per team
+
+  let assignPool;
+  if(antonio&&danielli){
+    // Create a "team" entry that expands to both
+    assignPool=[{id:"team_AD",name:"Antonio & Danielli",isTeam:true,members:[antonio,danielli]},...others];
+  } else {
+    assignPool=[...staff];
+  }
+
+  const np=assignPool.length;
   const entries=[];
+
   GEN_SLOTS.forEach((slot,i)=>{
-    const person=staff[i%n]; // round-robin
+    const assignee=assignPool[i%np];
     const isGroup=slot.locs.length>1;
-    const taskList=isGroup?SLOT_TASKS.group:SLOT_TASKS.single;
-    slot.locs.forEach(loc=>{
-      entries.push({
-        id:uid(),type:"task",
-        title:loc,location:loc,
-        assigneeId:person.id,
-        priority:"medium",
-        tasks:[...taskList],
-      });
-    });
+    const taskList=isGroup?[...SLOT_TASKS_GROUP]:[...SLOT_TASKS_SINGLE];
+
+    if(assignee.isTeam){
+      // Split locs between team members (or give all to both)
+      const half=Math.ceil(slot.locs.length/2);
+      const locsA=slot.locs.slice(0,half);
+      const locsB=slot.locs.slice(half);
+      const memberA=assignee.members[0];
+      const memberB=assignee.members[1];
+      // If only 1 loc, assign to Antonio, add Danielli as note
+      if(slot.locs.length===1){
+        entries.push({id:uid(),type:"task",title:slot.locs[0],location:slot.locs[0],
+          assigneeId:memberA.id,priority:"medium",tasks:[...taskList],
+          notes:`Working with ${memberB.name.split(" ")[0]}`});
+        entries.push({id:uid(),type:"task",title:slot.locs[0]+" (support)",location:slot.locs[0],
+          assigneeId:memberB.id,priority:"medium",tasks:[...taskList],
+          notes:`Working with ${memberA.name.split(" ")[0]}`});
+      } else {
+        locsA.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,
+          assigneeId:memberA.id,priority:"medium",tasks:[...taskList],notes:`With ${memberB.name.split(" ")[0]}`}));
+        locsB.forEach(loc=>entries.push({id:uid(),type:"task",title:loc,location:loc,
+          assigneeId:memberB.id,priority:"medium",tasks:[...taskList],notes:`With ${memberA.name.split(" ")[0]}`}));
+      }
+    } else {
+      slot.locs.forEach(loc=>entries.push({
+        id:uid(),type:"task",title:loc,location:loc,
+        assigneeId:assignee.id,priority:"medium",tasks:[...taskList],
+      }));
+    }
   });
   return entries;
 }
