@@ -3095,7 +3095,7 @@ function GdprPanel({allUsers,adminUser}){
   const isFrantisek=adminUser?.id==="u2";
   const rows=[
     {label:"Data Controller",value:"Soho House & Co — Operations Management"},
-    {label:"Data Processor",value:"Supabase (EU North-1, Stockholm)"},
+    {label:"Data Processor",value:"Supabase (AWS eu-north-1 (Stockholm, Sweden))"},
     {label:"Hosting",value:"Vercel (Edge Network — EU)"},
     {label:"Personal data collected",value:"Staff first & last name only"},
     {label:"Operational data",value:"Work tasks, location check-ins, checkout photos of locations, repair reports"},
