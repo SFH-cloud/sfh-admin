@@ -20,6 +20,7 @@ const BASE_USERS = [
   {id:"u15",name:"Amandeep Singh",           role:"cleaner",    pin:"73614"},
 ];
 const FRANTISEK_ID = "u2";
+const CAMILA_ID    = "u3";
 
 const CLEANER_LOCATIONS = [
   "Workshop","Flowers","Soho Home","Gym","Sauna & Steam Room",
@@ -3464,7 +3465,7 @@ export default function AdminPanel(){
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:11,color:"#d4a843",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{adminUser.name.split(" ")[0]}</div>
-              <div style={{fontSize:9,color:"#555"}}>{adminUser.id===FRANTISEK_ID?"Manager + Profile + PIN Reset":"Manager"}</div>
+              <div style={{fontSize:9,color:"#555"}}>{adminUser.id===FRANTISEK_ID?"Admin Manager":"Manager"}</div>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
