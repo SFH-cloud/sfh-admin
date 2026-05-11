@@ -1556,7 +1556,7 @@ function LiveLocations({liveLocations,allUsers}){
         </div>
       </div>
       <div style={{background:"#0a0a1a",border:"1px solid #22c55e22",borderRadius:14,padding:"12px 18px",marginBottom:20,fontSize:12,color:"#555",display:"flex",gap:10}}>
-        <span style={{fontSize:18}}>📍</span><div><span style={{color:"#aaa",fontWeight:600}}>Location Tracking · </span>Staff select their work location before starting tasks. Checkout requires a live photo before leaving.</div>
+        <span style={{fontSize:18}}>📍</span><div><span style={{color:"#aaa",fontWeight:600}}>Location Tracking · </span>Staff select the location being cleaned before starting tasks. A checkout photo is required before moving to another location.</div>
       </div>
       {Object.keys(byLoc).length>0&&(
         <div style={{marginBottom:24}}>
