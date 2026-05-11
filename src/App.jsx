@@ -3089,6 +3089,103 @@ function WeeklyPlanEditor({plan:initPlan,allUsers,rounds,onSave,onCancel,saving}
 }
 
 // ═══════════════════════════════════════════════════════════
+// GDPR / DATA & PRIVACY PANEL
+// ═══════════════════════════════════════════════════════════
+function GdprPanel({allUsers,adminUser}){
+  const isFrantisek=adminUser?.id==="u2";
+  const rows=[
+    {label:"Data Controller",value:"Soho House & Co — Operations Management"},
+    {label:"Data Processor",value:"Supabase (EU North-1, Stockholm)"},
+    {label:"Hosting",value:"Vercel (Edge Network — EU)"},
+    {label:"Personal data collected",value:"Staff first & last name only"},
+    {label:"Operational data",value:"Work tasks, location check-ins, checkout photos of locations, repair reports"},
+    {label:"Legal basis",value:"Legitimate interest of employer (Art. 6(1)(f) UK GDPR)"},
+    {label:"Data retention — tasks",value:"Completed tasks deleted after 12 months (automatic)"},
+    {label:"Data retention — photos",value:"Checkout photos deleted after 90 days (automatic)"},
+    {label:"Data retention — location",value:"Live location cleared on logout / end of shift"},
+    {label:"Right to erasure",value:"Admin can delete all staff data via Staff panel → Delete All Data"},
+    {label:"Push notifications",value:"Subscription stored per device, deleted on logout"},
+    {label:"Encryption",value:"All data encrypted at rest (Supabase AES-256) and in transit (TLS 1.3)"},
+    {label:"Access control",value:"Role-based PIN login — management, reception, porter, cleaner"},
+    {label:"Third parties",value:"No data sold or shared with third parties"},
+    {label:"Retention cron",value:"Runs every Sunday at 02:00 UTC automatically"},
+  ];
+  const C="#d4a843";
+  return(
+    <div>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:4}}>Data & Privacy</div>
+      <div style={{fontSize:13,color:"#555",marginBottom:24}}>UK GDPR compliance overview for Soho House Operations Platform</div>
+
+      {/* Status badge */}
+      <div style={{background:"#22c55e12",border:"1px solid #22c55e33",borderRadius:14,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"center",gap:14}}>
+        <div style={{fontSize:28}}>✅</div>
+        <div>
+          <div style={{fontSize:15,fontWeight:800,color:"#22c55e"}}>UK GDPR Compliant</div>
+          <div style={{fontSize:12,color:"#22c55e88",marginTop:2}}>Legitimate interest basis · EU data storage · Automatic retention · Right to erasure implemented</div>
+        </div>
+      </div>
+
+      {/* Info table */}
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,overflow:"hidden",marginBottom:20}}>
+        {rows.map((r,i)=>(
+          <div key={i} style={{display:"flex",gap:16,padding:"11px 18px",borderBottom:i<rows.length-1?"1px solid #1a1a30":"none",alignItems:"flex-start"}}>
+            <div style={{fontSize:11,color:"#555",textTransform:"uppercase",letterSpacing:.8,fontWeight:700,minWidth:210,flexShrink:0,paddingTop:1}}>{r.label}</div>
+            <div style={{fontSize:12,color:"#ccc",lineHeight:1.5}}>{r.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* What we do NOT collect */}
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"18px 20px",marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:12}}>What we do NOT collect or store</div>
+        {["Personal addresses or contact details","National insurance or ID numbers","Bank or payment information","Health or biometric data","Personal device identifiers","Data outside of working hours"].map((item,i)=>(
+          <div key={i} style={{display:"flex",gap:10,alignItems:"center",marginBottom:7}}>
+            <div style={{width:16,height:16,borderRadius:"50%",background:"#ef444422",border:"1px solid #ef444444",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#ef4444",flexShrink:0}}>✕</div>
+            <div style={{fontSize:12,color:"#888"}}>{item}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Staff rights */}
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"18px 20px",marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:12}}>Staff Rights under UK GDPR</div>
+        {[
+          {right:"Right to be informed",how:"Staff are informed by Soho House HR that this system is in use"},
+          {right:"Right of access",how:"Managers can view all data associated with a staff member"},
+          {right:"Right to erasure",how:"Admin → Staff panel → Delete All Data removes all records"},
+          {right:"Right to rectification",how:"Admin can update name and role at any time"},
+          {right:"Right to object",how:"Contact Soho House HR — system use is based on legitimate interest"},
+        ].map((r,i)=>(
+          <div key={i} style={{marginBottom:10,paddingBottom:10,borderBottom:i<4?"1px solid #1a1a30":"none"}}>
+            <div style={{fontSize:12,fontWeight:700,color:C}}>{r.right}</div>
+            <div style={{fontSize:11,color:"#666",marginTop:3}}>{r.how}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Automatic retention status */}
+      <div style={{background:"#111128",border:"1px solid #1e1e38",borderRadius:16,padding:"18px 20px"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:12}}>Automatic Data Retention Schedule</div>
+        {[
+          {what:"Completed tasks",when:"Deleted after 12 months",color:"#22c55e"},
+          {what:"Checkout photos",when:"Photo data removed after 90 days (metadata kept)",color:"#22c55e"},
+          {what:"Live location",when:"Cleared on logout or end of shift",color:"#22c55e"},
+          {what:"Push subscriptions",when:"Cleared on logout",color:"#22c55e"},
+          {what:"Staff names",when:"Retained while employed — delete via Staff panel",color:"#eab308"},
+        ].map((r,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:i<4?"1px solid #1a1a30":"none"}}>
+            <div style={{fontSize:12,color:"#aaa"}}>{r.what}</div>
+            <div style={{fontSize:11,color:r.color,fontWeight:600}}>{r.when}</div>
+          </div>
+        ))}
+        <div style={{marginTop:8,fontSize:10,color:"#555"}}>🕐 Retention cron runs every Sunday at 02:00 UTC via Supabase pg_cron</div>
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // ROOT ADMIN APP
 // ═══════════════════════════════════════════════════════════
 export default function AdminPanel(){
@@ -3357,6 +3454,7 @@ export default function AdminPanel(){
         {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairsRef.current.map(x=>x.id===r.id?r:x))} onDelete={id=>saveRepairs(repairsRef.current.filter(r=>r.id!==id))}/>}
         {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(ordersRef.current.map(x=>x.id===o.id?o:x))} onDelete={id=>saveOrders(ordersRef.current.filter(o=>o.id!==id))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
+        {tab==="gdpr"          &&<GdprPanel allUsers={allUsers} adminUser={adminUser}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
         {tab==="weekly_plan"  &&<WeeklyPlanPanel
           weeklyPlans={weeklyPlans}
