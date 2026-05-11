@@ -1455,6 +1455,7 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
   const [showCreate,setShowCreate]=useState(false);
   const [showPinReset,setShowPinReset]=useState(false);
   const isFrantisek=adminUser?.id===FRANTISEK_ID;
+  const isCamila=adminUser?.id===CAMILA_ID;
   const toggle=id=>setShowPins(p=>({...p,[id]:!p[id]}));
   const getPin=u=>pins[u.id]||u.pin;
   return(
