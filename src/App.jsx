@@ -3088,6 +3088,8 @@ export default function AdminPanel(){
   const tasksRef = useRef([]);
   const [repairs,setRepairs]             = useState([]);
   const [orders,setOrders]               = useState([]);
+  const repairsRef = useRef([]);
+  const ordersRef  = useRef([]);
   const [inspections,setInspections]     = useState([]);
   const [checkouts,setCheckouts]         = useState([]);
   const [liveLocations,setLiveLocations] = useState({});
@@ -3108,8 +3110,8 @@ export default function AdminPanel(){
       stor.get(SK.pins),stor.get(SK.rounds),stor.get("sh5_custom_products"),
     ]);
     if(tk!==null){setTasks(tk);tasksRef.current=tk;}
-    if(r!==null)setRepairs(r);
-    if(o!==null)setOrders(o);
+    if(r!==null){setRepairs(r);repairsRef.current=r;}
+    if(o!==null){setOrders(o);ordersRef.current=o;}
     if(ins!==null)setInspections(ins);
     if(ep!==null)setExtraProfiles(ep);
     if(co!==null)setCheckouts(co);
@@ -3229,7 +3231,7 @@ export default function AdminPanel(){
       }
     });
   };
-  const saveOrders =async o=>{await stor.set(SK.orders,o);setOrders(o);};
+  const saveOrders =async o=>{ordersRef.current=o;await stor.set(SK.orders,o);setOrders(o);};
 
   const addProfile=async p=>{const n=[...extraProfiles,p];await stor.set(SK.profiles,n);setExtraProfiles(n);};
   const deleteProfile=async id=>{const n=extraProfiles.filter(p=>p.id!==id);await stor.set(SK.profiles,n);setExtraProfiles(n);};
@@ -3323,8 +3325,8 @@ export default function AdminPanel(){
         {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
-        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairs.map(x=>x.id===r.id?r:x),repairs)} onDelete={id=>saveRepairs(repairs.filter(r=>r.id!==id))}/>}
-        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(orders.map(x=>x.id===o.id?o:x))} onDelete={id=>saveOrders(orders.filter(o=>o.id!==id))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
+        {tab==="repairs"       &&<RepairsPanel repairs={repairs} allUsers={allUsers} onUpdate={r=>saveRepairs(repairsRef.current.map(x=>x.id===r.id?r:x))} onDelete={id=>saveRepairs(repairsRef.current.filter(r=>r.id!==id))}/>}
+        {tab==="orders"        &&<OrdersPanel orders={orders} allUsers={allUsers} onUpdate={o=>saveOrders(ordersRef.current.map(x=>x.id===o.id?o:x))} onDelete={id=>saveOrders(ordersRef.current.filter(o=>o.id!==id))} customProducts={customProducts} onAddProduct={async p=>{const n=[...customProducts,p];await stor.set("sh5_custom_products",n);setCustomProducts(n);}}/>}
         {tab==="inspections"   &&<InspectionsPanel inspections={inspections} allUsers={allUsers}/>}
         {tab==="rounds"        &&<RoundsPanel rounds={rounds} allUsers={allUsers} adminUser={adminUser} isFrantisek={adminUser?.id===FRANTISEK_ID} onSave={async r=>{await stor.set(SK.rounds,r);setRounds(r);}}/>}
         {tab==="weekly_plan"  &&<WeeklyPlanPanel
