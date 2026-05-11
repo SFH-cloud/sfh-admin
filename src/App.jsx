@@ -1470,7 +1470,7 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
         Profile creation and PIN reset are restricted to Frantisek Kabilka.
       </div>}
       {ROLES.map(role=>{
-        const ru=allUsers.filter(u=>u.role===role);if(!ru.length)return null;
+        const ru=allUsers.filter(u=>u.role===role&&!(isCamila&&u.id===FRANTISEK_ID));if(!ru.length)return null;
         const color=RC[role];
         return(
           <div key={role} style={{marginBottom:28}}>
