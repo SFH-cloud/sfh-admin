@@ -878,9 +878,7 @@ function Overview({tasks,repairs,orders,inspections,liveLocations,allUsers,onNav
   return(
     <div>
       <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Dashboard Overview</div>
-      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:10,padding:"10px 16px",marginBottom:16,fontSize:11,color:"#555",display:"flex",gap:8,alignItems:"center"}}>
-        <span>🔒</span><span>Data retention: completed tasks deleted after 12 months · checkout photos after 90 days · runs automatically every Sunday</span>
-      </div>
+
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:24}}>
         {[
           {l:"Total Tasks",   v:tot,        c:"#d4a843", tab:"tasks",          filter:{status:"all"}},
@@ -945,6 +943,9 @@ function Overview({tasks,repairs,orders,inspections,liveLocations,allUsers,onNav
           );})}
           {!inspections.length&&<div style={{color:"#555",fontSize:13}}>No inspections yet.</div>}
         </div>
+      </div>
+      <div style={{marginTop:24,fontSize:10,color:"#2a2a3a",textAlign:"center",lineHeight:1.8}}>
+        🔒 Data retention: completed tasks deleted after 12 months · checkout photos after 90 days · auto-runs every Sunday
       </div>
     </div>
   );
@@ -1512,8 +1513,7 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
                       </div>
                     </div>
                     <div style={{background:"#0a0a1a",borderRadius:10,padding:"8px 12px",marginBottom:10}}>
-                      <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>📍 NFC</div>
-                      <div style={{color:"#888",fontSize:11,fontFamily:"monospace"}}>{u.nfc}</div>
+
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
                       {[{l:"Pending",v:pend,c:"#f97316"},{l:"Done",v:done,c:"#22c55e"},{l:"Rate",v:`${rate}%`,c:color}].map(s=>(
@@ -1540,9 +1540,6 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════
-// LIVE LOCATIONS
 // ═══════════════════════════════════════════════════════════
 function LiveLocations({liveLocations,allUsers}){
   const active=allUsers.filter(u=>liveLocations[u.id]);
@@ -1559,7 +1556,7 @@ function LiveLocations({liveLocations,allUsers}){
         </div>
       </div>
       <div style={{background:"#0a0a1a",border:"1px solid #22c55e22",borderRadius:14,padding:"12px 18px",marginBottom:20,fontSize:12,color:"#555",display:"flex",gap:10}}>
-        <span style={{fontSize:18}}>📍</span><div><span style={{color:"#aaa",fontWeight:600}}>NFC Location Tracking · </span>Staff select their work location from a list. Checkout requires a live photo.</div>
+        <span style={{fontSize:18}}>📍</span><div><span style={{color:"#aaa",fontWeight:600}}>Location Tracking · </span>Staff select their work location before starting tasks. Checkout requires a live photo before leaving.</div>
       </div>
       {Object.keys(byLoc).length>0&&(
         <div style={{marginBottom:24}}>
