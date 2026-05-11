@@ -214,6 +214,12 @@ const sendPush = async (userIds, notification) => {
 
 
 const uid=()=>"_"+Date.now()+Math.random().toString(36).slice(2,5);
+
+// PIN hashing via Web Crypto API (SHA-256)
+const hashPin=async(pin)=>{
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("sfh_salt_"+pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+};
 const tod=()=>new Date().toISOString().slice(0,10);
 const df=d=>d?new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"—";
 const dfShort=d=>d?new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):"—";
@@ -861,6 +867,9 @@ function Overview({tasks,repairs,orders,inspections,liveLocations,allUsers,onNav
   return(
     <div>
       <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:"Georgia,serif",marginBottom:20}}>Dashboard Overview</div>
+      <div style={{background:"#111128",border:"1px solid #252540",borderRadius:10,padding:"10px 16px",marginBottom:16,fontSize:11,color:"#555",display:"flex",gap:8,alignItems:"center"}}>
+        <span>🔒</span><span>Data retention: completed tasks deleted after 12 months · checkout photos after 90 days · runs automatically every Sunday</span>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:24}}>
         {[
           {l:"Total Tasks",   v:tot,        c:"#d4a843", tab:"tasks",          filter:{status:"all"}},
@@ -1504,7 +1513,8 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
                     <div style={{height:3,background:"#1e1e38",borderRadius:3,overflow:"hidden"}}>
                       <div style={{height:"100%",width:`${rate}%`,background:color,borderRadius:3}}/>
                     </div>
-                    {isCustom&&isFrantisek&&<button onClick={()=>onDeleteProfile(u.id)} style={{marginTop:10,width:"100%",background:"transparent",border:"1px solid #ef444433",borderRadius:8,padding:"6px",color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Remove</button>}
+                    {isCustom&&isFrantisek&&<button onClick={()=>onDeleteProfile(u.id)} style={{marginTop:10,width:"100%",background:"transparent",border:"1px solid #ef444433",borderRadius:8,padding:"6px",color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Remove Profile</button>}
+                    {isFrantisek&&<button onClick={()=>onDeleteStaffData(u.id,u.name)} style={{marginTop:4,width:"100%",background:"transparent",border:"1px solid #ef444433",borderRadius:8,padding:"6px",color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🗑 Delete All Data</button>}
                   </div>
                 );
               })}
@@ -3235,6 +3245,25 @@ export default function AdminPanel(){
 
   const addProfile=async p=>{const n=[...extraProfiles,p];await stor.set(SK.profiles,n);setExtraProfiles(n);};
   const deleteProfile=async id=>{const n=extraProfiles.filter(p=>p.id!==id);await stor.set(SK.profiles,n);setExtraProfiles(n);};
+
+  const deleteStaffData=async(staffId,staffName)=>{
+    if(!confirm("Delete ALL data for "+staffName+"?\n\nThis will remove:\n• All assigned tasks\n• Checkout photos\n• Live location\n• Push subscription\n\nThis cannot be undone."))return;
+    try{
+      const res=await fetch(SUPABASE_URL+"/rest/v1/rpc/sfh_delete_staff_data",{
+        method:"POST",
+        headers:{..._h,"Content-Type":"application/json"},
+        body:JSON.stringify({staff_id:staffId}),
+      });
+      if(res.ok){
+        await loadAll();
+        alert("✓ All data for "+staffName+" has been deleted.");
+      } else {
+        alert("Error deleting data. Please try again.");
+      }
+    }catch(e){
+      alert("Error: "+e.message);
+    }
+  };
 
   const handlePinReset=async(userId,newPin)=>{
     const updated={...pins,[userId]:newPin};
