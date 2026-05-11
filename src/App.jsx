@@ -4,20 +4,20 @@ import { useState, useEffect, useCallback, useRef } from "react";
 // DATA
 // ═══════════════════════════════════════════════════════════
 const BASE_USERS = [
-  {id:"u2", name:"Frantisek Kabilka",        role:"management", pin:"38516", nfc:"NFC-MGT-002"},
-  {id:"u3", name:"Camila Dalcin",            role:"management", pin:"92047", nfc:"NFC-MGT-003"},
-  {id:"u4", name:"Munish Soni",              role:"reception",  pin:"61385", nfc:"NFC-REC-001"},
-  {id:"u5", name:"Ramneek Kaur",             role:"reception",  pin:"29734", nfc:"NFC-REC-002"},
-  {id:"u6", name:"Sajin Abraham",            role:"reception",  pin:"85162", nfc:"NFC-REC-003"},
-  {id:"u7", name:"Simbarashe Manyati",       role:"porter",     pin:"43809", nfc:"NFC-PRT-001"},
-  {id:"u8", name:"Cristiano Melo",           role:"porter",     pin:"17653", nfc:"NFC-PRT-002"},
-  {id:"u9", name:"Joanna Rejak",             role:"cleaner",    pin:"56420", nfc:"NFC-CLN-001"},
-  {id:"u10",name:"Hilario Ximenes",          role:"cleaner",    pin:"30978", nfc:"NFC-CLN-002"},
-  {id:"u11",name:"Antonio Felisbino",        role:"cleaner",    pin:"84215", nfc:"NFC-CLN-003"},
-  {id:"u12",name:"Danielli Sanches Magrini", role:"cleaner",    pin:"67043", nfc:"NFC-CLN-004"},
-  {id:"u13",name:"Leandro Morilla",          role:"cleaner",    pin:"19862", nfc:"NFC-CLN-005"},
-  {id:"u14",name:"Khrystyna Kolodii",        role:"cleaner",    pin:"52307", nfc:"NFC-CLN-006"},
-  {id:"u15",name:"Amandeep Singh",           role:"cleaner",    pin:"73614", nfc:"NFC-CLN-007"},
+  {id:"u2", name:"Frantisek Kabilka",        role:"management", pin:"38516"},
+  {id:"u3", name:"Camila Dalcin",            role:"management", pin:"92047"},
+  {id:"u4", name:"Munish Soni",              role:"reception",  pin:"61385"},
+  {id:"u5", name:"Ramneek Kaur",             role:"reception",  pin:"29734"},
+  {id:"u6", name:"Sajin Abraham",            role:"reception",  pin:"85162"},
+  {id:"u7", name:"Simbarashe Manyati",       role:"porter",     pin:"43809"},
+  {id:"u8", name:"Cristiano Melo",           role:"porter",     pin:"17653"},
+  {id:"u9", name:"Joanna Rejak",             role:"cleaner",    pin:"56420"},
+  {id:"u10",name:"Hilario Ximenes",          role:"cleaner",    pin:"30978"},
+  {id:"u11",name:"Antonio Felisbino",        role:"cleaner",    pin:"84215"},
+  {id:"u12",name:"Danielli Sanches Magrini", role:"cleaner",    pin:"67043"},
+  {id:"u13",name:"Leandro Morilla",          role:"cleaner",    pin:"19862"},
+  {id:"u14",name:"Khrystyna Kolodii",        role:"cleaner",    pin:"52307"},
+  {id:"u15",name:"Amandeep Singh",           role:"cleaner",    pin:"73614"},
 ];
 const FRANTISEK_ID = "u2";
 
@@ -580,8 +580,7 @@ function CreateProfileModal({onSave,onClose,existingProfiles}){
   const save=()=>{
     if(!form.name.trim()||!form.pin||form.pin.length!==5){alert("Name required + 5-digit PIN");return;}
     const id="ux_"+Date.now();
-    const nfc=`NFC-${form.role.slice(0,3).toUpperCase()}-${String(existingProfiles.length+100)}`;
-    onSave({id,name:form.name.trim(),role:form.role,pin:form.pin,nfc,custom:true});
+    onSave({id,name:form.name.trim(),role:form.role,pin:form.pin,custom:true});
     onClose();
   };
   return(
@@ -1485,7 +1484,7 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
                       </div>
                     </div>
                     {loc&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:"6px 10px",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-                      <span>📡</span><span style={{fontSize:11,color:"#22c55e",fontWeight:600}}>{loc.location}</span><span style={{fontSize:9,color:"#555",marginLeft:"auto"}}>{loc.time}</span>
+                      <span>📍</span><span style={{fontSize:11,color:"#22c55e",fontWeight:600}}>{loc.location}</span><span style={{fontSize:9,color:"#555",marginLeft:"auto"}}>{loc.time}</span>
                     </div>}
                     <div style={{background:"#0a0a1a",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1499,7 +1498,7 @@ function StaffPanel({allUsers,tasks,liveLocations,adminUser,onAddProfile,onDelet
                       </div>
                     </div>
                     <div style={{background:"#0a0a1a",borderRadius:10,padding:"8px 12px",marginBottom:10}}>
-                      <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>📡 NFC</div>
+                      <div style={{fontSize:9,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>📍 NFC</div>
                       <div style={{color:"#888",fontSize:11,fontFamily:"monospace"}}>{u.nfc}</div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
@@ -1546,7 +1545,7 @@ function LiveLocations({liveLocations,allUsers}){
         </div>
       </div>
       <div style={{background:"#0a0a1a",border:"1px solid #22c55e22",borderRadius:14,padding:"12px 18px",marginBottom:20,fontSize:12,color:"#555",display:"flex",gap:10}}>
-        <span style={{fontSize:18}}>📡</span><div><span style={{color:"#aaa",fontWeight:600}}>NFC Location Tracking · </span>Staff tap NFC tags at their work area. Checkout requires a live photo.</div>
+        <span style={{fontSize:18}}>📍</span><div><span style={{color:"#aaa",fontWeight:600}}>NFC Location Tracking · </span>Staff select their work location from a list. Checkout requires a live photo.</div>
       </div>
       {Object.keys(byLoc).length>0&&(
         <div style={{marginBottom:24}}>
@@ -1554,7 +1553,7 @@ function LiveLocations({liveLocations,allUsers}){
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
             {Object.entries(byLoc).map(([loc,staff])=>(
               <div key={loc} style={{background:"#111128",border:"1px solid #22c55e22",borderRadius:14,padding:"14px 16px"}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#22c55e",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span>📡</span>{loc}</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#22c55e",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span>📍</span>{loc}</div>
                 {staff.map(s=>{const color=RC[s.role]||"#666";return(
                   <div key={s.id} style={{background:"#0a0a1a",borderRadius:10,marginBottom:8,overflow:"hidden"}}>
                     {/* Photo with name overlay */}
@@ -1605,7 +1604,7 @@ function LiveLocations({liveLocations,allUsers}){
           </div>
         </div>
       )}
-      {active.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}><div style={{fontSize:36,marginBottom:12}}>📡</div>No staff have set their location yet.</div>}
+      {active.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#555"}}><div style={{fontSize:36,marginBottom:12}}>📍</div>No staff have set their location yet.</div>}
     </div>
   );
 }
@@ -3376,7 +3375,7 @@ export default function AdminPanel(){
   const navItems=[
     {id:"overview",      l:"Overview",       e:"◈"},
     {id:"tasks",         l:"Tasks",          e:"✓",  badge:pendCount},
-    {id:"locations_live",l:"Live Locations", e:"📡", badge:locCount},
+    {id:"locations_live",l:"Live Locations", e:"📍", badge:locCount},
     {id:"report",        l:"Daily Report",   e:"📄"},
     {id:"time_report",   l:"Time Report",    e:"⏱"},
     {id:"weekly_plan",   l:"Weekly Plan",    e:"📅"},
