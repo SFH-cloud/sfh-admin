@@ -215,6 +215,17 @@ const sendPush = async (userIds, notification) => {
 
 const uid=()=>"_"+Date.now()+Math.random().toString(36).slice(2,5);
 
+// Audit log — write to Supabase audit table
+const auditLog=async(action,actorId,actorName,targetId,details={})=>{
+  try{
+    await fetch(SUPABASE_URL+"/rest/v1/sfh_audit_log",{
+      method:"POST",
+      headers:{..._h,"Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify({action,actor_id:actorId,actor_name:actorName,target_id:targetId,details}),
+    });
+  }catch(e){console.log("Audit log failed:",e.message);}
+};
+
 // PIN hashing via Web Crypto API (SHA-256)
 const hashPin=async(pin)=>{
   const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("sfh_salt_"+pin));
@@ -1213,6 +1224,7 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
                         updatedAt:new Date().toISOString(),
                       };
                       await onUpdate(approved);
+                      auditLog("task_approved","admin","Management",task.id,{title:task.title,assigneeId:task.assigneeId});
                       onClose();
                     }}
                     style={{width:"100%",padding:"13px",background:"#22c55e",border:"1px solid #22c55e",borderRadius:10,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
@@ -3099,6 +3111,7 @@ function GdprPanel({allUsers,adminUser}){
     {label:"Personal data collected",value:"Staff first & last name only"},
     {label:"Operational data",value:"Work tasks, location check-ins, checkout photos of locations, repair reports"},
     {label:"Legal basis",value:"Legitimate interest of employer (Art. 6(1)(f) UK GDPR)"},
+    {label:"Workplace photos",value:"Location checkout & task evidence photos — staff informed via Staff Handbook. Not used for performance management without separate notice."},
     {label:"Data retention — tasks",value:"Completed tasks deleted after 12 months (automatic)"},
     {label:"Data retention — photos",value:"Checkout photos deleted after 90 days (automatic)"},
     {label:"Data retention — location",value:"Live location cleared on logout / end of shift"},
@@ -3178,6 +3191,41 @@ function GdprPanel({allUsers,adminUser}){
           </div>
         ))}
         <div style={{marginTop:8,fontSize:10,color:"#555"}}>🕐 Retention cron runs every Sunday at 02:00 UTC via Supabase pg_cron</div>
+      </div>
+
+      {/* Data Breach Response */}
+      <div style={{background:"#111128",border:"1px solid #ef444433",borderRadius:16,padding:"18px 20px",marginTop:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:4}}>🚨 Data Breach Response Protocol</div>
+        <div style={{fontSize:11,color:"#555",marginBottom:14}}>In the event of a suspected data breach, UK GDPR Article 33 requires notification to ICO within 72 hours.</div>
+        {[
+          {step:"1",title:"Contain",desc:"Immediately restrict access to affected systems. Change Supabase API keys if compromised."},
+          {step:"2",title:"Assess (within 24h)",desc:"Determine what data was affected, how many staff, and likely cause."},
+          {step:"3",title:"Notify ICO (within 72h)",desc:"Report at ico.org.uk/make-a-complaint/data-security-breaches/ if risk to individuals' rights."},
+          {step:"4",title:"Notify Staff",desc:"If high risk to individuals, notify affected staff without undue delay."},
+          {step:"5",title:"Document",desc:"Record the breach, decisions made, and actions taken regardless of whether ICO notification required."},
+        ].map((s,i)=>(
+          <div key={i} style={{display:"flex",gap:12,marginBottom:10,paddingBottom:10,borderBottom:i<4?"1px solid #1a1a30":"none"}}>
+            <div style={{width:24,height:24,borderRadius:"50%",background:"#ef444422",border:"1px solid #ef444444",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#ef4444",fontWeight:700,flexShrink:0}}>{s.step}</div>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:"#ef4444"}}>{s.title}</div>
+              <div style={{fontSize:11,color:"#888",marginTop:2}}>{s.desc}</div>
+            </div>
+          </div>
+        ))}
+        <a href="https://ico.org.uk/make-a-complaint/data-security-breaches/" target="_blank" rel="noopener noreferrer"
+          style={{display:"block",textAlign:"center",padding:"10px",background:"#ef444415",border:"1px solid #ef444433",borderRadius:10,color:"#ef4444",fontSize:12,fontWeight:700,textDecoration:"none",marginTop:8}}>
+          → ICO Breach Notification Portal
+        </a>
+      </div>
+
+      {/* Employment Rights Act 2025 note */}
+      <div style={{background:"#111128",border:"1px solid #d4a84333",borderRadius:16,padding:"18px 20px",marginTop:16}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:4}}>📋 Employment Rights Act 2025 — Holiday Records</div>
+        <div style={{fontSize:11,color:"#888",lineHeight:1.7}}>
+          From April 2026 the ERA 2025 requires employers to keep holiday and working time records for <strong style={{color:"#d4a843"}}>6 years</strong>. 
+          This platform records task completion dates which supports working time evidence. 
+          Soho House HR must ensure these are exported and retained in a separate system for 6 years as task data is deleted after 12 months in this platform.
+        </div>
       </div>
     </div>
   );
@@ -3292,7 +3340,11 @@ export default function AdminPanel(){
     return()=>clearInterval(iv);
   },[loadAll]);
 
-  const handleLogin=async u=>{await stor.set(SK.adminSess,{id:u.id});setAdminUser(u);};
+  const handleLogin=async u=>{
+    await stor.set(SK.adminSess,{id:u.id});
+    setAdminUser(u);
+    auditLog("admin_login",u.id,u.name,"admin_panel",{role:u.role,time:new Date().toISOString()});
+  };
   const handleLogout=async()=>{await stor.del(SK.adminSess);setAdminUser(null);};
 
   const saveTasks  =async t=>{
@@ -3352,6 +3404,7 @@ export default function AdminPanel(){
       });
       if(res.ok){
         await loadAll();
+        auditLog("staff_data_deleted",adminUser?.id||"admin",adminUser?.name||"Admin",staffId,{staffName,deletedAt:new Date().toISOString()});
         alert("✓ All data for "+staffName+" has been deleted.");
       } else {
         alert("Error deleting data. Please try again.");
