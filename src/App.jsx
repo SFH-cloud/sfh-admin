@@ -184,6 +184,33 @@ const SK = {
   rounds:"sh5_rounds", weekly:"sh5_weekly_plans",
 };
 
+// ═══════════════════════════════════════════════════════════
+// PHOTO UPLOAD — Supabase Storage (no base64 in DB)
+// ═══════════════════════════════════════════════════════════
+const uploadPhoto = async (dataUrl, folder = "photos") => {
+  try {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const ext = blob.type === "image/png" ? "png" : "jpg";
+    const filename = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+    const uploadRes = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/sfh-photos/${filename}`,
+      {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": blob.type,
+          "x-upsert": "true",
+        },
+        body: blob,
+      }
+    );
+    if (!uploadRes.ok) return null;
+    return `${SUPABASE_URL}/storage/v1/object/public/sfh-photos/${filename}`;
+  } catch { return null; }
+};
+
 // ─── Push notification helper ────────────────────────────────────────────────
 const EDGE_URL = "https://kqfhbccydaltebpnfqzv.supabase.co/functions/v1/sfh-push";
 
@@ -696,7 +723,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
     locs.forEach(loc=>{
       const locTasks=dayTasks.filter(t=>t.location===loc);
       // Also look for tasks with photos regardless of date (in case task was created earlier)
-      const locTasksWithPhotos=tasks.filter(t=>t.location===loc&&t.photos&&t.photos.filter(p=>p.type!=="start"&&p.dataUrl).length>0);
+      const locTasksWithPhotos=tasks.filter(t=>t.location===loc&&t.photos&&t.photos.filter(p=>p.type!=="start"&&(PLACEHOLDER).length>0);
       const locCheckouts=dayCheckouts.filter(c=>c.location===loc);
       html+='<div class="loc-block"><div class="loc-name">&#128205; '+loc+'</div>';
       locTasks.forEach(t=>{
@@ -707,11 +734,11 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
         if(u)html+='<span class="staff-tag">'+u.name.split(" ")[0]+'</span>';
         html+='</div>';
         // Task evidence photos
-        const evPhotos=(t.photos||[]).filter(p=>p.type!=="start"&&p.dataUrl);
+        const evPhotos=(t.photos||[]).filter(p=>p.type!=="start"&&(PLACEHOLDER);
         if(includePhotos&&evPhotos.length>0){
           html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 6px 26px">';
           evPhotos.slice(0,4).forEach(ph=>{
-            html+='<img src="'+ph.dataUrl+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #e8d99a;" alt="evidence"/>';
+            html+='<img src="'+ph.url||ph.dataUrl+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #e8d99a;" alt="evidence"/>';
           });
           html+='</div>';
         }
@@ -720,12 +747,12 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
       if(includePhotos){
         const extraPhotos=locTasksWithPhotos
           .filter(t=>!locTasks.find(lt=>lt.id===t.id))
-          .flatMap(t=>(t.photos||[]).filter(p=>p.type!=="start"&&p.dataUrl).map(p=>({...p,staffName:getUser(t.assigneeId)?.name||""})));
+          .flatMap(t=>(t.photos||[]).filter(p=>p.type!=="start"&&(PLACEHOLDER).map(p=>({...p,staffName:getUser(t.assigneeId)?.name||""})));
         if(extraPhotos.length>0){
           html+='<div style="margin-top:12px"><div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Task Photos</div>';
           html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
           extraPhotos.slice(0,6).forEach(ph=>{
-            html+='<div style="text-align:center"><img src="'+ph.dataUrl+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #e8d99a;display:block;" alt="evidence"/>';
+            html+='<div style="text-align:center"><img src="'+ph.url||ph.dataUrl+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #e8d99a;display:block;" alt="evidence"/>';
             if(ph.staffName)html+='<div style="font-size:9px;color:#888;margin-top:2px">'+ph.staffName.split(" ")[0]+'</div>';
             html+='</div>';
           });
@@ -787,7 +814,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
       let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SFH Daily Report</title><style>'+css+"</style></head><body>";
       html+='<div class="header"><div><div class="logo">Soho <span>House</span></div><div style="font-size:13px;color:#888;margin-top:4px">Operations Daily Report</div></div>';
       html+='<div><div class="date-badge">'+dateLabel+"</div><div style=\"font-size:11px;color:#aaa;text-align:right;margin-top:6px\">Generated "+new Date().toLocaleString("en-GB")+"</div></div></div>";
-      const totalPhotos=dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&p.dataUrl)).length;
+      const totalPhotos=dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&(PLACEHOLDER)).length;
       html+='<div class="stats"><div class="stat"><div class="stat-val">'+filteredLocs.length+'</div><div class="stat-label">Locations Cleaned</div></div><div class="stat"><div class="stat-val">'+dayTasks.filter(t=>t.status==="done").length+'</div><div class="stat-label">Tasks Completed</div></div><div class="stat"><div class="stat-val">'+totalPhotos+'</div><div class="stat-label">Evidence Photos</div></div><div class="stat"><div class="stat-val">'+dayRepairs.length+"</div><div class=\"stat-label\">Repairs Reported</div></div></div>";
       html+=buildLocationsHtml(filteredLocs);
       html+=buildRepairsHtml();
@@ -823,7 +850,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
         </div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
-        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&p.dataUrl)).length,c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
+        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&(PLACEHOLDER)).length,c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
           <div key={s.l} style={{background:"#111128",border:`1px solid ${s.c}22`,borderRadius:14,padding:"16px",textAlign:"center"}}>
             <div style={{fontSize:30,fontWeight:900,color:s.c,fontFamily:"Georgia,serif"}}>{s.v}</div>
             <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginTop:4}}>{s.l}</div>
@@ -1101,8 +1128,8 @@ function TaskDetailDrawer({task,allUsers,onClose,onUpdate,onDelete,onSendBack}){
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
                 {task.photos.map((ph,i)=>(
                   <div key={i} style={{borderRadius:8,overflow:"hidden",position:"relative",aspectRatio:"1"}}>
-                    {ph.dataUrl
-                      ?<img src={ph.dataUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    {(ph.url||ph.dataUrl)
+                      ?<img src={ph.url||ph.dataUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       :<div style={{width:"100%",height:"100%",background:"#0a0a1a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📷</div>
                     }
                     {ph.time&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"#000000aa",fontSize:8,color:"#fff",padding:"2px 4px",textAlign:"center"}}>{ph.time}</div>}
@@ -1380,7 +1407,7 @@ function TasksPanel({tasks,allUsers,checkouts=[],rounds=[],onCreate,onCreateMult
                               </div>
                               <div style={{display:"flex",gap:5,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
                                 {t.photos&&t.photos.length>0&&<div style={{display:"flex",gap:2,marginRight:2}}>
-                                  {t.photos.slice(0,1).map((ph,pi)=>ph.dataUrl&&<img key={pi} src={ph.dataUrl} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setViewPhoto(ph.dataUrl);}}/>)}
+                                  {t.photos.slice(0,1).map((ph,pi)=>(ph.url||ph.dataUrl)&&<img key={pi} src={ph.url||ph.dataUrl} alt="" style={{width:22,height:22,borderRadius:4,objectFit:"cover",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setViewPhoto(ph.url||ph.dataUrl);}}/> )}
                                   {t.photos.length>1&&<div style={{width:22,height:22,borderRadius:4,background:"#252540",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#888"}}>+{t.photos.length-1}</div>}
                                 </div>}
                                 <button onClick={e=>{e.stopPropagation();setEditing(t);}} style={{background:"transparent",border:"1px solid #252540",borderRadius:7,padding:"3px 8px",color:"#aaa",cursor:"pointer",fontSize:10}}>Edit</button>
