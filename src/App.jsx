@@ -3289,7 +3289,7 @@ export default function AdminPanel(){
       await loadAll();
       setLoading(false);
     })();
-    const iv=setInterval(loadAll,10000);
+    const iv=setInterval(loadAll,30000);
     return()=>clearInterval(iv);
   },[loadAll]);
 
