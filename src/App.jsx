@@ -3498,7 +3498,7 @@ export default function AdminPanel(){
       </div>
       <div style={{flex:1,padding:"32px",overflowX:"auto",overflowY:"auto"}}>
         {tab==="overview"      &&<Overview tasks={tasks} repairs={repairs} orders={orders} inspections={inspections} liveLocations={liveLocations} allUsers={allUsers} onNav={tabId=>setTab(tabId)}/>}
-        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasksWithNotify([...tasks,t],tasks)} onCreateMultiple={newTasks=>saveTasksWithNotify([...tasks,...newTasks],tasks)} onUpdate={t=>saveTasks(tasksRef.current.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasksRef.current.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
+        {tab==="tasks"         &&<TasksPanel tasks={tasks} allUsers={allUsers} checkouts={checkouts} rounds={rounds} onCreate={t=>saveTasksWithNotify([...tasksRef.current,t],tasksRef.current)} onCreateMultiple={newTasks=>saveTasksWithNotify([...tasksRef.current,...newTasks],tasksRef.current)} onUpdate={t=>saveTasks(tasksRef.current.map(x=>x.id===t.id?t:x))} onDelete={id=>saveTasks(tasksRef.current.filter(t=>t.id!==id))} onDeleteCheckout={async id=>{const n=checkouts.filter((_,i)=>i!==id&&_.id!==id);await stor.set(SK.checkouts,n);setCheckouts(n);}}/>}
         {tab==="locations_live"&&<LiveLocations liveLocations={liveLocations} allUsers={allUsers}/>}
         {tab==="report"        &&<DailyReportPanel tasks={tasks} users={extraProfiles} checkouts={checkouts} repairs={repairs} inspections={inspections}/>}
         {tab==="staff"         &&<StaffPanel allUsers={allUsers} tasks={tasks} liveLocations={liveLocations} adminUser={adminUser} onAddProfile={addProfile} onDeleteProfile={deleteProfile} extraProfiles={extraProfiles} pins={pins} onResetPin={handlePinReset}/>}
@@ -3513,7 +3513,7 @@ export default function AdminPanel(){
           rounds={rounds}
           tasks={tasks}
           onSave={async p=>{await stor.set(SK.weekly,p);setWeeklyPlans(p);}}
-          onDispatch={async(newTasks)=>{await saveTasksWithNotify([...tasks,...newTasks],tasks);}}
+          onDispatch={async(newTasks)=>{await saveTasksWithNotify([...tasksRef.current,...newTasks],tasksRef.current);}}
         />}
         {tab==="time_report"  &&<TimeReportPanel tasks={tasks} allUsers={allUsers}/>}
       </div>
