@@ -154,22 +154,23 @@ const stor = {
       const d = await r.json();
       if (!Array.isArray(d) || !d.length) return null;
       return d[0].value;
-    } catch { return null; }
+    } catch(e) { console.error('stor.get error',k,e); return null; }
   },
   set: async (k, v) => {
     if (v === null || v === undefined) return;
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/sfh_data`, {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/sfh_data`, {
         method:"POST",
         headers:{..._h,"Prefer":"resolution=merge-duplicates"},
         body:JSON.stringify({key:k, value:v}),
       });
-    } catch {}
+      if(!r.ok){ const t=await r.text(); console.error('stor.set failed',k,r.status,t); }
+    } catch(e){ console.error('stor.set error',k,e); }
   },
   del: async (k) => {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/sfh_data?key=eq.${encodeURIComponent(k)}`, {method:"DELETE",headers:_h});
-    } catch {}
+    } catch(e){ console.error('stor.del error',k,e); }
   },
 };
 
@@ -723,7 +724,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
     locs.forEach(loc=>{
       const locTasks=dayTasks.filter(t=>t.location===loc);
       // Also look for tasks with photos regardless of date (in case task was created earlier)
-      const locTasksWithPhotos=tasks.filter(t=>t.location===loc&&t.photos&&t.photos.filter(p=>p.type!=="start"&&(PLACEHOLDER).length>0);
+      const locTasksWithPhotos=tasks.filter(t=>t.location===loc&&t.photos&&t.photos.filter(p=>p.type!=="start"&&(p.url||p.dataUrl)).length>0);
       const locCheckouts=dayCheckouts.filter(c=>c.location===loc);
       html+='<div class="loc-block"><div class="loc-name">&#128205; '+loc+'</div>';
       locTasks.forEach(t=>{
@@ -734,7 +735,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
         if(u)html+='<span class="staff-tag">'+u.name.split(" ")[0]+'</span>';
         html+='</div>';
         // Task evidence photos
-        const evPhotos=(t.photos||[]).filter(p=>p.type!=="start"&&(PLACEHOLDER);
+        const evPhotos=(t.photos||[]).filter(p=>p.type!=="start"&&(p.url||p.dataUrl));
         if(includePhotos&&evPhotos.length>0){
           html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 6px 26px">';
           evPhotos.slice(0,4).forEach(ph=>{
@@ -747,7 +748,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
       if(includePhotos){
         const extraPhotos=locTasksWithPhotos
           .filter(t=>!locTasks.find(lt=>lt.id===t.id))
-          .flatMap(t=>(t.photos||[]).filter(p=>p.type!=="start"&&(PLACEHOLDER).map(p=>({...p,staffName:getUser(t.assigneeId)?.name||""})));
+          .flatMap(t=>(t.photos||[]).filter(p=>p.type!=="start"&&(p.url||p.dataUrl)).map(p=>({...p,staffName:getUser(t.assigneeId)?.name||""})));
         if(extraPhotos.length>0){
           html+='<div style="margin-top:12px"><div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Task Photos</div>';
           html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
@@ -814,7 +815,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
       let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SFH Daily Report</title><style>'+css+"</style></head><body>";
       html+='<div class="header"><div><div class="logo">Soho <span>House</span></div><div style="font-size:13px;color:#888;margin-top:4px">Operations Daily Report</div></div>';
       html+='<div><div class="date-badge">'+dateLabel+"</div><div style=\"font-size:11px;color:#aaa;text-align:right;margin-top:6px\">Generated "+new Date().toLocaleString("en-GB")+"</div></div></div>";
-      const totalPhotos=dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&(PLACEHOLDER)).length;
+      const totalPhotos=dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&(p.url||p.dataUrl)));
       html+='<div class="stats"><div class="stat"><div class="stat-val">'+filteredLocs.length+'</div><div class="stat-label">Locations Cleaned</div></div><div class="stat"><div class="stat-val">'+dayTasks.filter(t=>t.status==="done").length+'</div><div class="stat-label">Tasks Completed</div></div><div class="stat"><div class="stat-val">'+totalPhotos+'</div><div class="stat-label">Evidence Photos</div></div><div class="stat"><div class="stat-val">'+dayRepairs.length+"</div><div class=\"stat-label\">Repairs Reported</div></div></div>";
       html+=buildLocationsHtml(filteredLocs);
       html+=buildRepairsHtml();
@@ -850,7 +851,7 @@ function DailyReportPanel({tasks,users,checkouts,repairs,inspections}){
         </div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
-        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&(PLACEHOLDER)).length,c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
+        {[{l:"Locations",v:filteredLocs.length,c:"#d4a843"},{l:"Tasks Done",v:dayTasks.filter(t=>t.status==="done").length,c:"#22c55e"},{l:"Photos",v:dayCheckouts.length+tasks.filter(t=>filteredLocs.includes(t.location)&&(t.photos||[]).some(p=>p.type!=="start"&&(p.url||p.dataUrl)),c:"#38bdf8"},{l:"Repairs",v:dayRepairs.length,c:"#f97316"}].map(s=>(
           <div key={s.l} style={{background:"#111128",border:`1px solid ${s.c}22`,borderRadius:14,padding:"16px",textAlign:"center"}}>
             <div style={{fontSize:30,fontWeight:900,color:s.c,fontFamily:"Georgia,serif"}}>{s.v}</div>
             <div style={{fontSize:10,color:"#555",textTransform:"uppercase",letterSpacing:1,marginTop:4}}>{s.l}</div>
